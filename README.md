@@ -99,6 +99,43 @@ been observed returning **HTTP 200 with an unrelated motivational quote** for a 
 junk, or non-inference credential, so a `200` proves nothing on its own. An `hsb_` token
 from `npx @hackerai/local` is a local-bridge credential and will fail this test.
 
+### HackerAI local bridge (optional, separate from the API key)
+
+There are two different HackerAI credentials and they are not interchangeable:
+
+| Credential | Prefix | What it does | Used by |
+| --- | --- | --- | --- |
+| Inference API key | `sk-` | Generates ideas through `/chat/completions` | the app |
+| Bridge token | `hsb_` | Lets HackerAI run commands on the machine running the bridge | `./bridge.sh` |
+
+An `hsb_` token is **not** a model credential. It will not generate ideas, and the
+inference endpoint answers unrelated prose when given one (or no token at all), so it
+must never be used as `HACKER_AI_API_KEY`.
+
+The bridge is useful when you want HackerAI to inspect or edit this project on your own
+computer. Store the token in `.env` (git-ignored) and start it:
+
+```bash
+# .env
+HACKERAI_BRIDGE_TOKEN=hsb_...
+HACKERAI_BRIDGE_NAME="Home PC"   # optional, shown in the computer list
+```
+
+```bash
+./bridge.sh
+```
+
+It prints `✓ Authenticated`, then `✓ Connected to command relay`, and stays connected
+until you press Ctrl+C. In HackerAI, pick that computer from the list.
+
+> The CLI's own warning: commands run directly on the host OS with **no isolation**.
+> Only connect machines you control, and disconnect when you are done. The script
+> refuses an `sk-` value by mistake, never echoes the token, and the repository has a
+> test (`tests/test_no_credentials.py`) that fails if a real token is ever committed.
+
+Run the bridge on the machine you want controlled. Starting it inside a container only
+gives remote access to that container.
+
 ### Hindi voices on ElevenLabs
 
 Any multilingual voice reads Hindi. Voice list and default ID come from your own library;
