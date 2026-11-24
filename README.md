@@ -11,6 +11,11 @@ copy, regenerate and full run history.
 > video rendering, publishing scheduler, deployment automation or Docker configuration.
 > It generates ideas and audio only.
 
+`SKILL.md` is the agent-facing manifest for this project. Its YAML frontmatter
+(`name`, `description`, `version`, `license`, `author`, `allowed-tools`, and
+`metadata.category` / `tags` / `languages` / `requires`) is the source for auto-populated
+skill fields; the Markdown body documents the real operating contract.
+
 ---
 
 ## 1. What it actually does

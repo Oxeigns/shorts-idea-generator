@@ -1,2 +1,5 @@
 -r requirements.txt
 pytest==9.2.0
+# Used by tests/test_skill_manifest.py to parse SKILL.md frontmatter. Also pulled in
+# transitively by uvicorn[standard], but the test must not rely on that.
+PyYAML==6.0.4
