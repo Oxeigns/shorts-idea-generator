@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · ViralShorts Ideas</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="login-body">
+  <div class="aurora" aria-hidden="true"></div>
+  <main class="login-shell">
+    <section class="login-card">
+      <div class="brand big">
+        <span class="brand-mark">VS</span>
+        <span class="brand-text">Viral<span>Shorts</span> <em>Ideas</em></span>
+      </div>
+      <h1>Welcome back</h1>
+      <p class="muted">Sign in to generate Hindi Shorts ideas and ElevenLabs voiceovers.</p>
+
+      {% if error %}
+      <div class="banner error"><strong>{{ error }}</strong></div>
+      {% endif %}
+
+      <form method="post" action="/login">
+        <input type="hidden" name="next" value="{{ next }}">
+        <label class="field">
+          <span class="field-label">Username</span>
+          <input name="username" autocomplete="username" required autofocus>
+        </label>
+        <label class="field">
+          <span class="field-label">Password</span>
+          <input name="password" type="password" autocomplete="current-password" required>
+        </label>
+        <button class="btn primary wide" type="submit">Sign in</button>
+      </form>
+
+      <p class="login-foot">
+        <span data-clock-date>{{ clock.date }}</span> · <span data-clock-time>{{ clock.time }}</span> IST
+      </p>
+    </section>
+  </main>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

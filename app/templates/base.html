@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}AI Viral Shorts Idea Generator{% endblock %}</title>
+  <meta name="description" content="AI-powered Hindi YouTube Shorts idea generator with ElevenLabs voiceovers.">
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body data-page="{% block page %}{% endblock %}">
+  <div class="aurora" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark">VS</span>
+      <span class="brand-text">Viral<span>Shorts</span> <em>Ideas</em></span>
+    </a>
+
+    <nav class="nav">
+      <a href="/" class="{% if path == '/' %}active{% endif %}">Dashboard</a>
+      <a href="/history" class="{% if path == '/history' %}active{% endif %}">History</a>
+      <a href="/config" class="{% if path == '/config' %}active{% endif %}">Config</a>
+    </nav>
+
+    <div class="top-right">
+      <div class="clock" title="Asia/Kolkata (IST)">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2m1 10.6 3.7 2.1-.8 1.3-4.6-2.7V6h1.7z"/></svg>
+        <span data-clock-date>{{ clock.date }}</span>
+        <span class="clock-time" data-clock-time>{{ clock.time }}</span>
+        <span class="clock-zone">IST</span>
+      </div>
+      <form method="post" action="/logout">
+        <button class="btn ghost small" type="submit">Log out</button>
+      </form>
+    </div>
+  </header>
+
+  <main class="wrap">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="foot">
+    <span>Ideas are generated live by Hacker AI. Nothing is templated or faked.</span>
+    <span class="dot">·</span>
+    <span>Voice by ElevenLabs</span>
+  </footer>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <script src="/static/app.js" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

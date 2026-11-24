@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block page %}config{% endblock %}
+{% block title %}Config · ViralShorts Ideas{% endblock %}
+{% block content %}
+
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Configuration</p>
+    <h1>API keys &amp; defaults</h1>
+    <p class="lede">
+      Keys are encrypted with Fernet before they touch the database. The browser only ever
+      receives a last-4 hint, never the value.
+    </p>
+  </div>
+</header>
+
+{% if saved %}
+<div class="banner good"><strong>Saved.</strong><p>Encrypted values were updated.</p></div>
+{% endif %}
+{% if error %}
+<div class="banner error"><strong>Could not save</strong><p>{{ error }}</p></div>
+{% endif %}
+
+<div class="config-grid">
+  <form class="panel config-form" method="post" action="/config">
+    <h2>Keys</h2>
+
+    <label class="field">
+      <span class="field-label">Hacker AI API key</span>
+      <input type="password" name="hacker_ai_api_key" autocomplete="off" spellcheck="false"
+             placeholder="{{ ('•••• ' ~ hacker.hint) if hacker.configured else 'sk-…' }}">
+      <small class="muted">
+        {% if hacker.configured %}Stored ({{ hacker.source }}) · {{ hacker.hint }}{% else %}Not set{% endif %}
+        · Get one at <a href="https://hackerai.sh/pricing" target="_blank" rel="noopener">hackerai.sh/pricing</a>.
+        An <code>sk-</code> key is required; an <code>hsb_</code> bridge token will not generate ideas.
+      </small>
+    </label>
+    <label class="check"><input type="checkbox" name="clear_hacker_ai" value="1"> Remove the saved Hacker AI key</label>
+
+    <label class="field">
+      <span class="field-label">ElevenLabs API key</span>
+      <input type="password" name="elevenlabs_api_key" autocomplete="off" spellcheck="false"
+             placeholder="{{ ('•••• ' ~ eleven.hint) if eleven.configured else 'your ElevenLabs key' }}">
+      <small class="muted">
+        {% if eleven.configured %}Stored ({{ eleven.source }}) · {{ eleven.hint }}{% else %}Not set{% endif %}
+        · Used only for Hindi speech synthesis.
+      </small>
+    </label>
+    <label class="check"><input type="checkbox" name="clear_elevenlabs" value="1"> Remove the saved ElevenLabs key</label>
+
+    <h2>Defaults</h2>
+    <div class="two-col tight">
+      <label class="field">
+        <span class="field-label">Hacker AI model</span>
+        <input name="hacker_ai_model" value="{{ values.hacker_ai_model }}" spellcheck="false">
+        <small class="muted">Use <code>auto</code> unless you need a specific model.</small>
+      </label>
+      <label class="field">
+        <span class="field-label">Hacker AI base URL</span>
+        <input name="hacker_ai_base_url" value="{{ values.hacker_ai_base_url }}" spellcheck="false">
+        <small class="muted">OpenAI-compatible endpoint.</small>
+      </label>
+    </div>
+
+    <label class="field">
+      <span class="field-label">ElevenLabs voice</span>
+      {% if voices %}
+      <select name="elevenlabs_voice_id">
+        {% for voice in voices %}
+        <option value="{{ voice.id }}" {% if voice.id == values.elevenlabs_voice_id %}selected{% endif %}>
+          {{ voice.name }}{% if voice.gender %} · {{ voice.gender }}{% endif %}{% if voice.accent %} · {{ voice.accent }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      {% else %}
+      <input name="elevenlabs_voice_id" value="{{ values.elevenlabs_voice_id }}" spellcheck="false">
+      {% endif %}
+      <small class="muted">
+        Multilingual voices read Hindi. Male and female options come from your own voice library.
+        {% if voice_error %}<span class="bad">Voice list failed: {{ voice_error }}</span>{% endif %}
+      </small>
+    </label>
+
+    <div class="two-col tight">
+      <label class="field">
+        <span class="field-label">ElevenLabs model</span>
+        <input name="elevenlabs_model_id" value="{{ values.elevenlabs_model_id }}" spellcheck="false">
+        <small class="muted"><code>eleven_multilingual_v2</code> supports speed and Hindi.</small>
+      </label>
+      <label class="field">
+        <span class="field-label">Default speed</span>
+        <input name="default_speed" type="number" min="0.7" max="1.2" step="0.05" value="{{ values.default_speed }}">
+      </label>
+    </div>
+    <label class="field">
+      <span class="field-label">Default emotion</span>
+      <select name="default_emotion">
+        {% for emotion in emotions %}
+        <option value="{{ emotion }}" {% if emotion == values.default_emotion %}selected{% endif %}>{{ emotion|capitalize }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <button class="btn primary" type="submit">Save configuration</button>
+  </form>
+
+  <div class="stack">
+    <section class="panel">
+      <h2>Connection tests</h2>
+      <p class="muted tiny">Tests use the saved keys. Save first, then test.</p>
+      <div class="row">
+        <button class="btn ghost" type="button" data-test="hackerai">Test Hacker AI</button>
+        <button class="btn ghost" type="button" data-test="elevenlabs">Test ElevenLabs</button>
+      </div>
+      <div class="test-out" data-test-out hidden></div>
+    </section>
+
+    <section class="panel">
+      <h2>ElevenLabs account</h2>
+      {% if account %}
+        <div class="facts compact">
+          <div><span class="label">Plan</span><strong>{{ account.tier or '—' }}</strong></div>
+          <div><span class="label">Status</span>
+            <strong class="{{ 'good' if account.status in ['active', 'trialing'] else 'bad' }}">{{ account.status or '—' }}</strong>
+          </div>
+          <div><span class="label">Characters</span><strong>{{ account.character_count or 0 }} / {{ account.character_limit or 0 }}</strong></div>
+          <div><span class="label">Voices</span><strong>{{ voices|length }}</strong></div>
+        </div>
+        {% if account.status not in ['active', 'trialing'] %}
+        <div class="banner warn">
+          <strong>Voice generation is blocked</strong>
+          <p>The key is valid, but the subscription status is <code>{{ account.status }}</code>.
+          ElevenLabs will refuse speech until the outstanding invoice is paid.</p>
+        </div>
+        {% endif %}
+      {% elif account_error %}
+        <div class="banner error"><strong>Account check failed</strong><p>{{ account_error }}</p></div>
+      {% else %}
+        <p class="muted">Add an ElevenLabs key to see plan and character usage.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <h2>Notes</h2>
+      <ul class="notes">
+        <li>Keys live in the local database, encrypted. This app has no analytics and sends no telemetry.</li>
+        <li>Every idea is validated: Hindi must be Devanagari, scenes and subtitles must be present, hashtags must exist.</li>
+        <li>A prose reply from the model is treated as an error, never turned into ideas.</li>
+        <li>Voice generation consumes ElevenLabs characters from your plan.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+
+{% endblock %}
