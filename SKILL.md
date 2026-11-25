@@ -1,7 +1,7 @@
 ---
 name: shorts-idea-generator
 description: Generate original Hindi YouTube Shorts ideas with Hacker AI, validate them field by field, and narrate them as Hindi voiceovers with ElevenLabs. Use when asked for Shorts ideas, viral hooks, Hindi scripts, scene-by-scene visuals, subtitles, hashtags, SEO descriptions, or Hindi TTS audio, or when running, configuring or debugging this FastAPI dashboard.
-version: 1.0.0
+version: 1.1.0
 license: MIT
 author: Yash Samrat
 allowed-tools: Bash(./run.sh:*) Bash(./bridge.sh:*) Bash(./.venv/bin/python:*) Bash(./.venv/bin/pip install:*) Bash(./.venv/bin/python -m pytest:*) Bash(curl:*) Read Write Edit
@@ -122,8 +122,9 @@ That is a billing problem, not a bad key. Do not rotate the key over it.
 | `GET` | `/api/health` | Version, counts, database kind (public). |
 | `POST` | `/api/ideas/generate` | `{"count": 10, "categories": ["Science"], "auto": false}` |
 | `GET` | `/api/runs/{id}` | Run status and real counters. |
-| `GET` | `/api/ideas?q=&saved=&run=` | Filtered ideas. |
+| `GET` | `/api/ideas?q=&saved=&run=` | Filtered ideas; `q` searches all text fields. |
 | `POST` | `/api/ideas/{id}/save` | Toggle saved. |
+| `DELETE` | `/api/ideas/{id}` | Soft-delete the idea and remove its MP3s. |
 | `POST` | `/api/ideas/{id}/regenerate` | Replace one idea in the same category. |
 | `GET` | `/api/voices` | Configured flag, voices, default. |
 | `POST` | `/api/ideas/{id}/voice` | `{"voice_id": "...", "emotion": "dramatic", "speed": 1.05}` |
@@ -138,7 +139,12 @@ Everything except `/api/health`, `/login` and `/static/*` requires the session c
   `configured` / `source` / last-4 hint — **never** the value. Do not add an endpoint that
   returns a stored key.
 - Sessions are HMAC-signed `HttpOnly` cookies. Login is limited to 10 attempts per 5
-  minutes per IP.
+  minutes per IP; generation, voice, regenerate and provider probes have their own
+  sliding-window limits and answer `429` with `Retry-After`.
+- Responses carry a strict CSP (no inline script or style) plus `nosniff`,
+  `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy` and HSTS on HTTPS.
+- Provider base URLs must be HTTPS and resolve to a public address, blocking SSRF via the
+  Config form. `HACKER_AI_ALLOW_INSECURE_BASE_URL=1` is a local-gateway-only exception.
 - Never put a real key in the repository, a README, a screenshot or a chat message.
   `tests/test_no_credentials.py` fails the suite if an `sk-`, `hsb_` or ElevenLabs key is
   ever committed.
@@ -155,7 +161,10 @@ Tests use a temporary SQLite database and mock every network call, so no live ke
 needed. They cover encryption and hint leakage, Devanagari rejection, missing-field
 rejection, hashtag and duration normalisation, duplicate similarity, the run lifecycle,
 stale-run reaping, 401 behaviour, the `payment_required` → `402` mapping, the probe
-rejecting a quote reply, and the credential guard.
+rejecting a quote reply, and the credential guard. Hardening tests additionally cover
+search past 200 rows, voiceover counts, deterministic voiceover ordering, retry and
+`Retry-After` behaviour, SSRF base-URL rejection, rate limiting, security headers, and a
+guard against inline styles/handlers/scripts in templates.
 
 ## Troubleshooting
 

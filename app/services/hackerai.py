@@ -15,11 +15,14 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import re
+import time
 from dataclasses import dataclass, field
 
 import httpx
 
+from app import netguard
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -51,6 +54,12 @@ SYSTEM_PROMPT = (
     "studies, quotes, dates or names, and you never promise views. "
     "You answer with a single JSON object and nothing else."
 )
+
+
+# Transient conditions worth another attempt. 4xx client errors are not retried
+# because repeating the same request cannot fix a bad key or a malformed body.
+RETRY_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
+MAX_ATTEMPTS = 3
 
 
 class ProviderError(RuntimeError):
@@ -107,6 +116,60 @@ Return ONLY this JSON, no markdown fences, no commentary:
 {{"ideas":[{{"title":"","hook":"","script":"","scenes":[{{"scene":1,"visual":""}}],"voiceover_text":"","emotion":"","music":"","subtitles":[""],"description":"","hashtags":["#"],"duration_sec":30,"engagement_question":"","category":""}}]}}"""
 
 
+def _sleep(seconds: float) -> None:
+    """Indirection so tests can assert backoff without actually waiting."""
+    time.sleep(seconds)
+
+
+def _retry_delay(response: httpx.Response | None, attempt: int) -> float:
+    if response is not None:
+        header = (response.headers.get("retry-after") or "").strip()
+        if header:
+            try:
+                seconds = float(header)
+            except ValueError:
+                seconds = 0.0
+            if seconds > 0:
+                return min(seconds, 10.0)
+    return min(0.8 * (2**attempt), 6.0) + random.uniform(0, 0.25)
+
+
+def _send(url: str, headers: dict, payload: dict, timeout: float) -> httpx.Response:
+    try:
+        netguard.assert_public_url(url)
+    except netguard.InvalidBaseURL as exc:
+        raise ProviderError(str(exc), status=400) from exc
+    with httpx.Client(timeout=timeout) as client:
+        return client.post(url, headers=headers, json=payload)
+
+
+def _post(url: str, headers: dict, payload: dict, timeout: float) -> httpx.Response:
+    """POST with bounded retries for transient failures.
+
+    Retries 408/409/425/429 and 5xx with exponential backoff, honouring a
+    Retry-After header when present. The final response is returned so the
+    caller can map it to a readable error.
+    """
+    last_error = "unknown network error"
+    for attempt in range(MAX_ATTEMPTS):
+        try:
+            response = _send(url, headers, payload, timeout)
+        except httpx.HTTPError as exc:
+            last_error = str(exc)
+            if attempt == MAX_ATTEMPTS - 1:
+                break
+            logger.warning("Hacker AI request failed (%s); retrying", exc)
+            _sleep(_retry_delay(None, attempt))
+            continue
+        if response.status_code in RETRY_STATUS and attempt < MAX_ATTEMPTS - 1:
+            delay = _retry_delay(response, attempt)
+            logger.warning("Hacker AI returned HTTP %s; retrying in %.1fs", response.status_code, delay)
+            _sleep(delay)
+            continue
+        return response
+    raise ProviderError(f"Hacker AI is unreachable after {MAX_ATTEMPTS} attempts: {last_error}")
+
+
 def chat(
     key: str,
     base_url: str,
@@ -128,20 +191,12 @@ def chat(
         "response_format": {"type": "json_object"},
     }
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-    try:
-        with httpx.Client(timeout=timeout or settings.request_timeout) as client:
-            response = client.post(url, headers=headers, json=payload)
-    except httpx.HTTPError as exc:
-        raise ProviderError(f"Hacker AI is unreachable: {exc}") from exc
+    response = _post(url, headers, payload, timeout or settings.request_timeout)
 
     if response.status_code == 400:
         # Some compatible gateways reject response_format. One retry without it.
         payload.pop("response_format", None)
-        try:
-            with httpx.Client(timeout=timeout or settings.request_timeout) as client:
-                response = client.post(url, headers=headers, json=payload)
-        except httpx.HTTPError as exc:
-            raise ProviderError(f"Hacker AI is unreachable: {exc}") from exc
+        response = _post(url, headers, payload, timeout or settings.request_timeout)
 
     if response.status_code >= 400:
         body = response.text[:400]
@@ -149,6 +204,25 @@ def chat(
             raise ProviderError(
                 "Hacker AI rejected the key. An sk- inference key is required; an hsb_ "
                 f"bridge token cannot generate ideas. (HTTP {response.status_code})",
+                status=response.status_code,
+                sample=body,
+            )
+        if response.status_code == 402:
+            raise ProviderError(
+                "Hacker AI refused the request for lack of credits (HTTP 402). Top up the account and retry.",
+                status=402,
+                sample=body,
+            )
+        if response.status_code == 429:
+            retry_after = response.headers.get("retry-after") or "a minute"
+            raise ProviderError(
+                f"Hacker AI is rate limiting requests. Wait about {retry_after} and try again.",
+                status=429,
+                sample=body,
+            )
+        if response.status_code >= 500:
+            raise ProviderError(
+                f"Hacker AI is having server trouble (HTTP {response.status_code}) after {MAX_ATTEMPTS} attempts. Try again shortly.",
                 status=response.status_code,
                 sample=body,
             )
@@ -390,12 +464,14 @@ def probe(key: str, base_url: str, model: str = "auto", timeout: float = 30) -> 
         "temperature": 0,
     }
     try:
-        with httpx.Client(timeout=timeout) as client:
-            response = client.post(
-                url, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, json=payload
-            )
-    except httpx.HTTPError as exc:
-        return {"ok": False, "reason": f"Hacker AI is unreachable: {exc}"}
+        response = _post(
+            url,
+            {"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            payload,
+            timeout,
+        )
+    except ProviderError as exc:
+        return {"ok": False, "reason": exc.message}
     if response.status_code >= 400:
         return {"ok": False, "reason": f"HTTP {response.status_code}: {response.text[:200]}"}
     try:

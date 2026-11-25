@@ -1,31 +1,50 @@
 {% extends "base.html" %}
 {% block page %}dashboard{% endblock %}
-{% block title %}Dashboard · ViralShorts Ideas{% endblock %}
+{% block title %}Studio · ViralShorts Ideas{% endblock %}
 {% block content %}
 
 <section class="hero">
   <div>
-    <p class="eyebrow">AI idea engine</p>
-    <h1>Find the next viral Short,<br><span class="grad">before anyone else.</span></h1>
+    <p class="eyebrow">Live idea studio</p>
+    <h1>Shorts ideas that feel<br><span class="grad">inevitable.</span></h1>
     <p class="lede">
       Fresh Hindi concepts with hooks, scripts, scene plans, subtitles and SEO — written by
       Hacker AI, narrated by ElevenLabs. Existing titles are excluded, so every batch is new.
     </p>
   </div>
-  <div class="hero-side">
-    <div class="clock-card">
-      <span class="label">India Standard Time</span>
-      <strong data-clock-time>{{ clock.time }}</strong>
-      <span class="sub"><span data-clock-date>{{ clock.date }}</span> · {{ clock.weekday }}</span>
-    </div>
+  <div class="clock-card">
+    <span class="label"><i class="live-dot" aria-hidden="true"></i> India Standard Time</span>
+    <strong class="clock-time" data-clock-time>{{ clock.time }}</strong>
+    <span class="sub"><span data-clock-date>{{ clock.date }}</span> · {{ clock.weekday }} · IST</span>
   </div>
 </section>
 
-<section class="stats">
-  <article><span class="label">Total ideas</span><strong>{{ count.total }}</strong></article>
-  <article><span class="label">Saved</span><strong>{{ count.saved }}</strong></article>
-  <article><span class="label">Today</span><strong>{{ count.today }}</strong></article>
-  <article><span class="label">Runs</span><strong>{{ count.runs }}</strong></article>
+<section class="stats" aria-label="Library statistics">
+  <article class="stat">
+    <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M12 2 2 7l10 5 10-5zm0 7.8L4.6 6.1 12 2.4l7.4 3.7zM2 12l10 5 10-5-2.2-1.1L12 14.8 4.2 10.9zm0 5 10 5 10-5-2.2-1.1L12 19.8 4.2 15.9z"/></svg></span>
+    <span class="label">Total ideas</span>
+    <strong data-stat-total>{{ count.total }}</strong>
+  </article>
+  <article class="stat">
+    <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M6 2h12a2 2 0 0 1 2 2v18l-8-4.5L4 22V4a2 2 0 0 1 2-2m0 2v14.7l6-3.4 6 3.4V4z"/></svg></span>
+    <span class="label">Saved</span>
+    <strong data-stat-saved>{{ count.saved }}</strong>
+  </article>
+  <article class="stat">
+    <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M13 2 4.5 13.5H11l-1 8.5 9-12h-6.5z"/></svg></span>
+    <span class="label">Today</span>
+    <strong>{{ count.today }}</strong>
+  </article>
+  <article class="stat">
+    <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M3 10v4h3l4 4V6L6 10zm12.5 2a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4M13 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6"/></svg></span>
+    <span class="label">Voiceovers</span>
+    <strong>{{ count.voiceovers }}</strong>
+  </article>
+  <article class="stat">
+    <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10h-2a8 8 0 1 1-2.3-5.6L14 10h8V2l-2.9 2.9A9.96 9.96 0 0 0 12 2"/></svg></span>
+    <span class="label">Runs</span>
+    <strong>{{ count.runs }}</strong>
+  </article>
 </section>
 
 <section class="panel generator" id="generator"
@@ -33,8 +52,8 @@
          data-voices-enabled="{{ 'true' if voices_enabled else 'false' }}">
   <div class="panel-head">
     <div>
-      <h2>Generate ideas</h2>
-      <p class="muted">Pick a count and categories, or let Auto mode choose the best mix.</p>
+      <h2>Create a batch</h2>
+      <p class="muted tiny">Pick a count and categories, or let Auto mode choose the best mix.</p>
     </div>
     <span class="status-pill {{ 'good' if hacker.configured else 'bad' }}">
       <i></i>{{ 'Hacker AI key ready' if hacker.configured else 'Hacker AI key missing' }}
@@ -45,7 +64,7 @@
     <div class="gen-controls">
       <div class="field">
         <span class="field-label">How many ideas?</span>
-        <div class="segmented" data-count-group>
+        <div class="segmented" data-count-group role="group" aria-label="Idea count">
           <button type="button" class="seg active" data-count="10">10</button>
           <button type="button" class="seg" data-count="20">20</button>
           <button type="button" class="seg" data-count="50">50</button>
@@ -67,29 +86,26 @@
           <button type="button" class="link" data-select-all>Select all</button>
         </div>
         <div class="cat-grid" data-categories>
-          {% for c in categories %}
-          <label class="cat">
-            <input type="checkbox" value="{{ c }}">
-            <span>{{ c }}</span>
+          {% for category in categories %}
+          <label class="cat-chip">
+            <input type="checkbox" value="{{ category }}">
+            <span>{{ category }}</span>
           </label>
           {% endfor %}
         </div>
       </div>
     </div>
 
-    <div class="gen-action">
-      <button type="button" class="btn primary big" data-generate>
+    <aside class="gen-side">
+      <p class="gen-summary" data-gen-summary>10 ideas · all 12 categories</p>
+      <button type="button" class="btn btn-primary" data-generate>
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M13 2 4.5 13.5H11l-1 8.5 9-12h-6.5z"/></svg>
         Generate ideas
       </button>
-      <p class="muted tiny">
-        Requests are batched 10 at a time and validated field by field. Duplicates are discarded,
-        so a batch can return fewer than requested — the count shown is real.
-      </p>
 
       {% if not hacker.configured %}
-      <div class="banner warn">
-        <strong>Add your Hacker AI key first</strong>
+      <div class="banner error">
+        <strong>No inference key</strong>
         <p>Open <a href="/config">Config</a> and paste an <code>sk-</code> inference key. An <code>hsb_</code> bridge token cannot generate ideas.</p>
       </div>
       {% endif %}
@@ -102,7 +118,9 @@
         <div class="bar"><span data-run-bar></span></div>
         <p class="muted tiny" data-run-note></p>
       </div>
-    </div>
+
+      <p class="gen-hint">Ten ideas usually take one or two provider calls. You can leave this page; the batch keeps running.</p>
+    </aside>
   </div>
 </section>
 
@@ -116,25 +134,35 @@
 
 <section class="ideas-head">
   <div>
-    <h2>{% if run_filter %}Run #{{ run_filter }} ideas{% elif saved_filter %}Saved ideas{% else %}Ideas{% endif %}</h2>
+    <h2>{% if run_filter %}Run #{{ run_filter }}{% elif saved_filter %}Saved ideas{% elif q %}Search results{% else %}Latest ideas{% endif %}</h2>
     <p class="muted" data-result-count>Showing {{ ideas|length }} idea{{ '' if ideas|length == 1 else 's' }}</p>
   </div>
   <div class="toolbar">
-    <div class="search">
+    <form class="search" method="get" action="/" role="search">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10 2a8 8 0 1 0 4.9 14.3l5 5 1.4-1.4-5-5A8 8 0 0 0 10 2m0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12"/></svg>
-      <input type="search" placeholder="Search titles, scripts, hashtags…" data-search aria-label="Search ideas">
-    </div>
-    <div class="segmented small" data-filter-group>
-      <button type="button" class="seg active" data-filter="all">All</button>
-      <button type="button" class="seg" data-filter="saved">Saved</button>
+      <input type="search" name="q" value="{{ q }}" placeholder="Search titles, scripts, tags…" data-search aria-label="Search ideas">
+      {% if saved_filter %}<input type="hidden" name="saved" value="1">{% endif %}
+      {% if run_filter %}<input type="hidden" name="run" value="{{ run_filter }}">{% endif %}
+    </form>
+    <div class="segmented small" data-filter-group role="group" aria-label="Filter ideas">
+      <button type="button" class="seg {% if not saved_filter %}active{% endif %}" data-filter="all">All</button>
+      <button type="button" class="seg {% if saved_filter %}active{% endif %}" data-filter="saved">Saved</button>
       <button type="button" class="seg" data-filter="today">Today</button>
     </div>
+    {% if saved_filter %}
+    <a class="link" href="/">Show all ideas</a>
+    {% elif run_filter %}
+    <a class="link" href="/">Show all ideas</a>
+    {% elif q %}
+    <a class="link" href="/">Clear search</a>
+    {% else %}
     <button type="button" class="link" data-expand-all>Expand all</button>
+    {% endif %}
   </div>
 </section>
 
 {% if truncated %}
-<p class="muted tiny">Showing the newest 200 ideas. Use search or the history page to narrow down.</p>
+<p class="muted tiny">Showing the newest 200 ideas. Press Enter in search to search the whole library.</p>
 {% endif %}
 
 <section class="ideas" data-ideas>
@@ -143,9 +171,7 @@
            data-idea="{{ idea.id }}"
            data-saved="{{ 'true' if idea.saved else 'false' }}"
            data-today="{{ 'true' if idea.is_today else 'false' }}"
-           data-search="{{ (idea.title ~ ' ' ~ idea.hook ~ ' ' ~ idea.category ~ ' ' ~ (idea.hashtags|join(' ')))|lower }}">
-    <div class="idea-glow" aria-hidden="true"></div>
-
+           data-search="{{ (idea.title ~ ' ' ~ idea.hook ~ ' ' ~ idea.category ~ ' ' ~ idea.description ~ ' ' ~ (idea.hashtags|join(' ')))|lower }}">
     <header class="idea-head">
       <div class="meta">
         <span class="chip cat">{{ idea.category }}</span>
@@ -153,27 +179,40 @@
         <span class="chip">{{ idea.emotion }}</span>
         <span class="chip soft">#{{ idea.id }}</span>
       </div>
-      <button type="button" class="star {% if idea.saved %}on{% endif %}"
-              data-save="{{ idea.id }}" aria-pressed="{{ 'true' if idea.saved else 'false' }}"
-              title="{{ 'Remove from saved' if idea.saved else 'Save this idea' }}">
-        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
-      </button>
+      <div class="idea-tools">
+        <button type="button" class="icon-btn star {% if idea.saved %}on{% endif %}"
+                data-save="{{ idea.id }}" aria-pressed="{{ 'true' if idea.saved else 'false' }}"
+                aria-label="{{ 'Remove from saved' if idea.saved else 'Save idea' }}"
+                title="{{ 'Remove from saved' if idea.saved else 'Save this idea' }}">
+          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
+        </button>
+        <button type="button" class="icon-btn" data-delete="{{ idea.id }}" data-title="{{ idea.title }}"
+                aria-label="Delete idea" title="Delete idea">
+          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M9 3h6a1 1 0 0 1 1 1v1h4v2H4V5h4V4a1 1 0 0 1 1-1M6 8h12l-1 12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2zm3 3v8h1.5v-8zm4.5 0v8H15v-8z"/></svg>
+        </button>
+      </div>
     </header>
 
     <h3 class="idea-title">{{ idea.title }}</h3>
     <p class="hook"><span>Hook</span>“{{ idea.hook }}”</p>
 
     <div class="idea-actions">
-      <button type="button" class="btn ghost small" data-copy="#script-{{ idea.id }}">Copy script</button>
-      <button type="button" class="btn ghost small" data-copy="#vo-{{ idea.id }}">Copy voice text</button>
-      <button type="button" class="btn ghost small" data-voice-toggle="{{ idea.id }}">Hindi voice</button>
-      <button type="button" class="btn ghost small" data-regen="{{ idea.id }}">Regenerate</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-copy="#script-{{ idea.id }}">Copy script</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-copy="#vo-{{ idea.id }}">Copy voice text</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-voice-toggle="{{ idea.id }}">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3m-7 9h2a5 5 0 0 0 10 0h2a7 7 0 0 1-6 6.9V21h3v2H8v-2h3v-2.1A7 7 0 0 1 5 12"/></svg>
+        Hindi voice
+      </button>
+      <button type="button" class="btn btn-ghost btn-sm" data-regen="{{ idea.id }}">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 4a8 8 0 1 0 7.7 10h-2.1A6 6 0 1 1 12 6c1.6 0 3 .6 4 1.7L13 11h7V4l-2.3 2.3A8 8 0 0 0 12 4"/></svg>
+        Regenerate
+      </button>
     </div>
 
-    <details class="more" data-details="{{ idea.id }}">
+    <details class="idea-details" data-details="{{ idea.id }}">
       <summary>
-        <span>Full idea — script, scenes, subtitles, SEO</span>
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="m7 10 5 5 5-5z"/></svg>
+        <span>Full breakdown — script, scenes, subtitles, SEO</span>
+        <svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="m7 10 5 5 5-5z"/></svg>
       </summary>
 
       <div class="more-body">
@@ -218,9 +257,11 @@
         <div class="facts">
           <div><span class="label">Voice emotion</span><strong>{{ idea.emotion }}</strong></div>
           <div><span class="label">Music</span><strong>{{ idea.music }}</strong></div>
+          <div><span class="label">Duration</span><strong>{{ idea.duration_sec }} seconds</strong></div>
           <div class="span-2"><span class="label">Engagement question</span><strong>{{ idea.engagement_question }}</strong></div>
-          <div><span class="label">Model</span><strong class="mono">{{ idea.model }}</strong></div>
           <div><span class="label">Created</span><strong>{{ idea.created_at|ist('%d-%m-%Y %H:%M') }} IST</strong></div>
+          <div><span class="label">Model</span><strong class="mono">{{ idea.model }}</strong></div>
+          <div><span class="label">Idea</span><strong class="mono">#{{ idea.id }}</strong></div>
         </div>
 
         <section class="block voice-panel" data-voice-panel="{{ idea.id }}">
@@ -246,8 +287,8 @@
             </label>
           </div>
           <div class="row">
-            <button type="button" class="btn primary small" data-voice="{{ idea.id }}">Generate voice</button>
-            <a class="btn ghost small" href="{{ idea.voiceover_download or '#' }}" data-voice-download {% if not idea.voiceover_url %}hidden{% endif %}>Download MP3</a>
+            <button type="button" class="btn btn-primary btn-sm" data-voice="{{ idea.id }}"{% if not voices_enabled %} disabled title="Add an ElevenLabs key in Config"{% endif %}>Generate voice</button>
+            <a class="btn btn-ghost btn-sm" href="{{ idea.voiceover_download or '#' }}" data-voice-download {% if not idea.voiceover_url %}hidden{% endif %}>Download MP3</a>
           </div>
           <div class="voice-result" data-voice-result="{{ idea.id }}">
             {% if idea.voiceover_url %}
@@ -264,10 +305,15 @@
   {% else %}
   <div class="empty" data-empty>
     <div class="empty-icon" aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="34" height="34"><path fill="currentColor" d="M13 2 4.5 13.5H11l-1 8.5 9-12h-6.5z"/></svg>
+      <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M13 2 4.5 13.5H11l-1 8.5 9-12h-6.5z"/></svg>
     </div>
+    {% if q %}
+    <h3>No ideas match “{{ q }}”</h3>
+    <p>Search runs across titles, hooks, scripts, descriptions and hashtags. Try a shorter word.</p>
+    {% else %}
     <h3>No ideas yet</h3>
     <p>Choose a count above and hit <strong>Generate ideas</strong>. Ten ideas take one or two API calls.</p>
+    {% endif %}
   </div>
   {% endfor %}
 

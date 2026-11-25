@@ -1,35 +1,83 @@
-/* ViralShorts Ideas — dashboard behaviour.
-   Plain ES2019, no build step, no third-party code.
+/* ViralShorts Ideas — interface behaviour.
+   Plain ES2017, no build step, no third-party code.
    Every server error message is shown verbatim; nothing is swallowed. */
 (function () {
   "use strict";
 
-  var $ = function (sel, root) { return (root || document).querySelector(sel); };
-  var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
+  const $ = (sel, root) => (root || document).querySelector(sel);
+  const $$ = (sel, root) => Array.prototype.slice.call((root || document).querySelectorAll(sel));
+
+  /* ------------------------------------------------------------------ theme */
+  const THEMES = ["dark", "light", "system"];
+  const THEME_LABELS = { dark: "Dark", light: "Light", system: "Auto" };
+  const META_COLORS = { dark: "#06060a", light: "#f2f2f7", system: "#f2f2f7" };
+
+  function preferredTheme() {
+    const match = document.cookie.match(/(?:^|;\s*)theme=(dark|light|system)/);
+    if (match) return match[1];
+    return document.documentElement.getAttribute("data-theme") || "dark";
+  }
+
+  function applyTheme(value, persist) {
+    const theme = THEMES.indexOf(value) === -1 ? "dark" : value;
+    document.documentElement.setAttribute("data-theme", theme);
+    if (persist) {
+      document.cookie = "theme=" + theme + "; Path=/; Max-Age=31536000; SameSite=Lax";
+    }
+    const dark =
+      theme === "dark" ||
+      (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", dark ? META_COLORS.dark : META_COLORS.light);
+
+    const next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+    $$("[data-theme-toggle]").forEach((btn) => {
+      btn.setAttribute("aria-label", "Appearance: " + THEME_LABELS[theme] + ". Switch to " + THEME_LABELS[next] + ".");
+      btn.setAttribute("title", "Appearance: " + THEME_LABELS[theme] + " (tap for " + THEME_LABELS[next] + ")");
+    });
+  }
+
+  function initTheme() {
+    applyTheme(preferredTheme(), false);
+    $$("[data-theme-toggle]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const current = document.documentElement.getAttribute("data-theme") || "dark";
+        const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
+        applyTheme(next, true);
+        toast("Appearance", THEME_LABELS[next] + " mode selected.", "good", 1800);
+      });
+    });
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => {
+      if ((document.documentElement.getAttribute("data-theme") || "") === "system") applyTheme("system", false);
+    };
+    if (media.addEventListener) media.addEventListener("change", onChange);
+    else if (media.addListener) media.addListener(onChange);
+  }
 
   /* ------------------------------------------------------------------ toasts */
   function toast(title, message, variant, duration) {
-    var host = document.getElementById("toasts");
+    const host = document.getElementById("toasts");
     if (!host) return;
-    var el = document.createElement("div");
+    const el = document.createElement("div");
     el.className = "toast" + (variant ? " " + variant : "");
     el.setAttribute("role", variant === "error" ? "alert" : "status");
-    var strong = document.createElement("strong");
+    const strong = document.createElement("strong");
     strong.textContent = title || "Notice";
     el.appendChild(strong);
     if (message) {
-      var body = document.createElement("span");
+      const body = document.createElement("span");
       body.textContent = String(message);
       el.appendChild(body);
     }
     host.appendChild(el);
 
-    var closed = false;
-    var close = function () {
+    let closed = false;
+    const close = () => {
       if (closed) return;
       closed = true;
       el.classList.add("leaving");
-      window.setTimeout(function () { el.remove(); }, 220);
+      window.setTimeout(() => el.remove(), 220);
     };
     el.addEventListener("click", close);
     window.setTimeout(close, duration || 6000);
@@ -39,12 +87,14 @@
   /* --------------------------------------------------------------- api calls */
   function detailOf(payload) {
     if (!payload) return "";
-    var detail = payload.detail;
+    const detail = payload.detail;
     if (Array.isArray(detail)) {
-      return detail.map(function (item) {
-        if (item && typeof item === "object") return item.msg || JSON.stringify(item);
-        return String(item);
-      }).join("; ");
+      return detail
+        .map((item) => {
+          if (item && typeof item === "object") return item.msg || JSON.stringify(item);
+          return String(item);
+        })
+        .join("; ");
     }
     if (detail && typeof detail === "object") return JSON.stringify(detail);
     if (detail) return String(detail);
@@ -54,72 +104,152 @@
 
   function api(url, options) {
     options = options || {};
-    var hasBody = options.body !== undefined && options.body !== null;
+    const hasBody = options.body !== undefined && options.body !== null;
     return fetch(url, {
       method: options.method || "GET",
       credentials: "same-origin",
       cache: "no-store",
       headers: hasBody ? { "Content-Type": "application/json" } : {},
       body: hasBody ? JSON.stringify(options.body) : undefined
-    }).then(function (res) {
-      return res.text().then(function (text) {
-        var payload = null;
+    }).then((res) => {
+      return res.text().then((text) => {
+        let payload = null;
         if (text) {
-          try { payload = JSON.parse(text); } catch (err) { payload = null; }
+          try {
+            payload = JSON.parse(text);
+          } catch (err) {
+            payload = null;
+          }
         }
         if (!res.ok) {
-          var message = detailOf(payload) || (payload && payload.error) ||
+          const message =
+            detailOf(payload) ||
+            (payload && payload.error) ||
             ("HTTP " + res.status + (res.statusText ? " " + res.statusText : ""));
-          var error = new Error(message);
+          const error = new Error(message);
           error.status = res.status;
+          if (res.status === 401) {
+            window.setTimeout(() => {
+              window.location.href = "/login";
+            }, 900);
+          }
           throw error;
         }
         return payload;
       });
-    }, function () {
+    }, () => {
       throw new Error("Network request failed. Check the connection and try again.");
     });
   }
 
-  /* ------------------------------------------------------------- India clock */
+  /* --------------------------------------------------------------- clock */
   function startClock() {
-    var timeEls = $$("[data-clock-time]");
-    var dateEls = $$("[data-clock-date]");
+    const timeEls = $$("[data-clock-time]");
+    const dateEls = $$("[data-clock-date]");
     if (!timeEls.length && !dateEls.length) return;
 
-    var timeFmt, dateFmt;
+    let timeFmt;
+    let dateFmt;
     try {
       timeFmt = new Intl.DateTimeFormat("en-GB", {
-        timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
       });
       dateFmt = new Intl.DateTimeFormat("en-GB", {
-        timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric"
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
       });
     } catch (err) {
-      timeFmt = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+      timeFmt = new Intl.DateTimeFormat("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      });
       dateFmt = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
     }
 
-    var parts = function (fmt, date) {
-      var out = {};
-      fmt.formatToParts(date).forEach(function (part) { out[part.type] = part.value; });
+    const parts = (fmt, date) => {
+      const out = {};
+      fmt.formatToParts(date).forEach((part) => {
+        out[part.type] = part.value;
+      });
       return out;
     };
 
-    var tick = function () {
-      var now = new Date();
-      var t = parts(timeFmt, now);
-      var hour = t.hour === "24" ? "00" : t.hour;
-      var time = hour + ":" + t.minute + ":" + t.second;
-      var d = parts(dateFmt, now);
-      var date = d.day + "-" + d.month + "-" + d.year;
+    const tick = () => {
+      const now = new Date();
+      const t = parts(timeFmt, now);
+      const hour = t.hour === "24" ? "00" : t.hour;
+      const time = hour + ":" + t.minute + ":" + t.second;
+      const d = parts(dateFmt, now);
+      const date = d.day + "-" + d.month + "-" + d.year;
 
-      timeEls.forEach(function (el) { if (el.textContent !== time) el.textContent = time; });
-      dateEls.forEach(function (el) { if (el.textContent !== date) el.textContent = date; });
+      timeEls.forEach((el) => {
+        if (el.textContent !== time) el.textContent = time;
+      });
+      dateEls.forEach((el) => {
+        if (el.textContent !== date) el.textContent = date;
+      });
     };
 
     tick();
     window.setInterval(tick, 1000);
+  }
+
+  /* --------------------------------------------------------------- confirm */
+  function confirmSheet(opts) {
+    const dlg = document.getElementById("confirm-dialog");
+    if (!dlg || typeof dlg.showModal !== "function") {
+      return Promise.resolve(window.confirm(opts.message || opts.title || "Are you sure?"));
+    }
+    if (dlg.open) dlg.close();
+
+    const title = document.getElementById("confirm-title");
+    const message = document.getElementById("confirm-message");
+    const okBtn = document.getElementById("confirm-ok");
+    const cancelBtn = document.getElementById("confirm-cancel");
+
+    title.textContent = opts.title || "Are you sure?";
+    message.textContent = opts.message || "";
+    okBtn.textContent = opts.confirmLabel || "Continue";
+    okBtn.classList.toggle("danger", opts.danger !== false);
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        okBtn.removeEventListener("click", onOk);
+        cancelBtn.removeEventListener("click", onCancel);
+        dlg.removeEventListener("cancel", onCancel);
+        dlg.removeEventListener("click", onBackdrop);
+        if (dlg.open) dlg.close();
+        resolve(value);
+      };
+      const onOk = () => finish(true);
+      const onCancel = (event) => {
+        if (event) event.preventDefault();
+        finish(false);
+      };
+      const onBackdrop = (event) => {
+        if (event.target === dlg) finish(false);
+      };
+      okBtn.addEventListener("click", onOk);
+      cancelBtn.addEventListener("click", onCancel);
+      dlg.addEventListener("cancel", onCancel);
+      dlg.addEventListener("click", onBackdrop);
+      dlg.showModal();
+      window.setTimeout(() => {
+        if (!opts.danger) okBtn.focus();
+        else cancelBtn.focus();
+      }, 40);
+    });
   }
 
   /* --------------------------------------------------------------- clipboard */
@@ -127,58 +257,75 @@
     if (navigator.clipboard && window.isSecureContext) {
       return navigator.clipboard.writeText(text);
     }
-    return new Promise(function (resolve, reject) {
-      var area = document.createElement("textarea");
+    return new Promise((resolve, reject) => {
+      const area = document.createElement("textarea");
       area.value = text;
       area.setAttribute("readonly", "");
-      area.style.position = "fixed";
-      area.style.top = "0";
-      area.style.left = "-9999px";
+      area.className = "clipboard-helper";
       document.body.appendChild(area);
       area.select();
-      var ok = false;
-      try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+      let ok = false;
+      try {
+        ok = document.execCommand("copy");
+      } catch (err) {
+        ok = false;
+      }
       area.remove();
-      if (ok) resolve(); else reject(new Error("The browser blocked clipboard access."));
+      if (ok) resolve();
+      else reject(new Error("The browser blocked clipboard access."));
     });
   }
 
   /* --------------------------------------------------------------- generator */
   function initGenerator() {
-    var panel = $("[data-active-run]");
-    var genBtn = $("[data-generate]");
+    const panel = $("[data-active-run]");
+    const genBtn = $("[data-generate]");
     if (!genBtn) return;
 
-    var count = 10;
-    var autoBox = $("[data-auto]");
-    var catField = $("[data-cat-field]");
-    var countGroup = $("[data-count-group]");
+    let count = 10;
+    const autoBox = $("[data-auto]");
+    const catField = $("[data-cat-field]");
+    const countGroup = $("[data-count-group]");
+    const summary = $("[data-gen-summary]");
+
+    const categories = () =>
+      $$("input[type=checkbox]", catField)
+        .filter((box) => box.checked)
+        .map((box) => box.value);
+
+    const refreshSummary = () => {
+      if (!summary) return;
+      const autoOn = !!(autoBox && autoBox.checked);
+      const chosen = categories().length;
+      let scope = "choose at least one category";
+      if (autoOn) scope = "all 12 categories";
+      else if (chosen) scope = chosen + (chosen === 1 ? " category" : " categories");
+      summary.textContent = count + " ideas · " + scope;
+    };
 
     if (countGroup) {
-      $$("[data-count]", countGroup).forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          $$("[data-count]", countGroup).forEach(function (other) {
-            other.classList.toggle("active", other === btn);
-            other.setAttribute("aria-pressed", other === btn ? "true" : "false");
+      $$("[data-count]", countGroup).forEach((btn) => {
+        btn.addEventListener("click", () => {
+          count = parseInt(btn.getAttribute("data-count"), 10) || 10;
+          $$("[data-count]", countGroup).forEach((other) => {
+            const active = other === btn;
+            other.classList.toggle("active", active);
+            other.setAttribute("aria-pressed", active ? "true" : "false");
           });
-          var next = parseInt(btn.getAttribute("data-count"), 10);
-          count = next === 20 || next === 50 ? next : 10;
+          refreshSummary();
         });
       });
     }
 
-    var categories = function () {
-      if (!catField) return [];
-      return $$("input[type=checkbox]", catField).filter(function (box) { return box.checked; })
-        .map(function (box) { return box.value; });
-    };
-
-    var syncCats = function () {
+    const syncCats = () => {
+      const off = !!(autoBox && autoBox.checked);
       if (!catField) return;
-      var off = !!(autoBox && autoBox.checked);
       catField.classList.toggle("disabled", off);
       catField.setAttribute("aria-disabled", off ? "true" : "false");
-      $$("input[type=checkbox]", catField).forEach(function (box) { box.disabled = off; });
+      $$("input[type=checkbox]", catField).forEach((box) => {
+        box.disabled = off;
+      });
+      refreshSummary();
     };
 
     if (autoBox) {
@@ -186,47 +333,55 @@
       syncCats();
     }
 
-    var selectAllBtn = $("[data-select-all]");
-    var refreshSelectAll = function () {
+    const selectAllBtn = $("[data-select-all]");
+    const refreshSelectAll = () => {
       if (!selectAllBtn || !catField) return;
-      var boxes = $$("input[type=checkbox]", catField);
-      var allOn = boxes.length > 0 && boxes.every(function (box) { return box.checked; });
+      const boxes = $$("input[type=checkbox]", catField);
+      const allOn = boxes.length > 0 && boxes.every((box) => box.checked);
       selectAllBtn.textContent = allOn ? "Clear all" : "Select all";
     };
     if (catField) {
-      catField.addEventListener("change", refreshSelectAll);
+      catField.addEventListener("change", () => {
+        refreshSelectAll();
+        refreshSummary();
+      });
       refreshSelectAll();
     }
     if (selectAllBtn && catField) {
-      selectAllBtn.addEventListener("click", function () {
-        var boxes = $$("input[type=checkbox]", catField).filter(function (box) { return !box.disabled; });
-        var allOn = boxes.length > 0 && boxes.every(function (box) { return box.checked; });
-        boxes.forEach(function (box) { box.checked = !allOn; });
+      selectAllBtn.addEventListener("click", () => {
+        const boxes = $$("input[type=checkbox]", catField).filter((box) => !box.disabled);
+        const allOn = boxes.length > 0 && boxes.every((box) => box.checked);
+        boxes.forEach((box) => {
+          box.checked = !allOn;
+        });
         refreshSelectAll();
+        refreshSummary();
       });
     }
 
-    var box = $("[data-run]");
-    var nodes = {
+    const box = $("[data-run]");
+    const nodes = {
       label: box ? $("[data-run-label]", box) : null,
       count: box ? $("[data-run-count]", box) : null,
       bar: box ? $("[data-run-bar]", box) : null,
       note: box ? $("[data-run-note]", box) : null
     };
-    var LABELS = { queued: "Queued", running: "Generating…", done: "Done", failed: "Failed" };
-    var pollTimer = null;
+    const LABELS = { queued: "Queued", running: "Generating…", done: "Done", failed: "Failed" };
+    let pollTimer = null;
 
-    var renderRun = function (run) {
+    const renderRun = (run) => {
       if (!box) return;
       box.hidden = false;
       if (nodes.label) nodes.label.textContent = LABELS[run.status] || run.status || "Working…";
       if (nodes.count) nodes.count.textContent = (run.generated || 0) + "/" + (run.requested || 0);
-      var settled = (run.generated || 0) + (run.rejected || 0);
-      var pct = run.status === "done" ? 100
-        : Math.min(99, Math.round((settled / Math.max(1, run.requested || 1)) * 100));
+      const settled = (run.generated || 0) + (run.rejected || 0);
+      const pct =
+        run.status === "done"
+          ? 100
+          : Math.min(99, Math.round((settled / Math.max(1, run.requested || 1)) * 100));
       if (nodes.bar) nodes.bar.style.width = pct + "%";
       if (nodes.note) {
-        var bits = [];
+        const bits = [];
         if (run.rejected) bits.push(run.rejected + " rejected by validation or the duplicate check");
         if (run.model) bits.push("model " + run.model);
         if (run.status === "failed" && run.error) bits.push(run.error);
@@ -234,63 +389,75 @@
       }
     };
 
-    var stopPolling = function () {
-      if (pollTimer) { window.clearTimeout(pollTimer); pollTimer = null; }
+    const stopPolling = () => {
+      if (pollTimer) {
+        window.clearTimeout(pollTimer);
+        pollTimer = null;
+      }
     };
 
-    var setBusy = function (busy) {
+    const setBusy = (busy) => {
       genBtn.disabled = !!busy;
       if (busy) genBtn.setAttribute("aria-busy", "true");
       else genBtn.removeAttribute("aria-busy");
     };
 
-    var pollRun = function (runId) {
+    const pollRun = (runId) => {
       stopPolling();
-      var failures = 0;
+      let failures = 0;
 
-      var step = function () {
-        api("/api/runs/" + encodeURIComponent(runId)).then(function (run) {
-          failures = 0;
-          renderRun(run);
-          if (run.status === "done") {
-            setBusy(false);
-            toast("Ideas ready",
-              (run.generated || 0) + " of " + (run.requested || 0) + " ideas passed validation.",
-              "good", 3400);
-            window.setTimeout(function () {
-              window.location.href = "/?run=" + encodeURIComponent(run.id);
-            }, 700);
-            return;
-          }
-          if (run.status === "failed") {
-            setBusy(false);
-            toast("Generation failed", run.error || "The provider returned an error.", "error", 12000);
-            return;
-          }
-          pollTimer = window.setTimeout(step, 1500);
-        }).catch(function (err) {
-          failures += 1;
-          if (failures >= 4) {
-            setBusy(false);
-            toast("Lost track of the run",
-              err.message + " Open History to see whether the batch finished.", "error", 12000);
-            return;
-          }
-          pollTimer = window.setTimeout(step, 2500);
-        });
+      const step = () => {
+        api("/api/runs/" + encodeURIComponent(runId))
+          .then((run) => {
+            failures = 0;
+            renderRun(run);
+            if (run.status === "done") {
+              setBusy(false);
+              toast(
+                "Ideas ready",
+                run.generated + " of " + run.requested + " ideas passed validation.",
+                "good",
+                3400
+              );
+              window.setTimeout(() => {
+                window.location.href = "/?run=" + encodeURIComponent(run.id);
+              }, 700);
+              return;
+            }
+            if (run.status === "failed") {
+              setBusy(false);
+              toast("Generation failed", run.error || "The provider returned an error.", "error", 12000);
+              return;
+            }
+            pollTimer = window.setTimeout(step, 1500);
+          })
+          .catch((err) => {
+            failures += 1;
+            if (failures >= 4) {
+              setBusy(false);
+              toast(
+                "Lost track of the run",
+                err.message + " Open History to see whether the batch finished.",
+                "error",
+                12000
+              );
+              return;
+            }
+            pollTimer = window.setTimeout(step, 2500);
+          });
       };
 
       pollTimer = window.setTimeout(step, 500);
     };
 
-    genBtn.addEventListener("click", function () {
-      var autoOn = !!(autoBox && autoBox.checked);
-      var chosen = autoOn ? [] : categories();
+    genBtn.addEventListener("click", () => {
+      const autoOn = !!(autoBox && autoBox.checked);
+      const chosen = autoOn ? [] : categories();
       if (!autoOn && chosen.length === 0) {
         toast("Pick a category", "Select at least one category, or switch Auto mode on.", "warn");
         return;
       }
-      var wasHidden = box && box.hidden;
+      const wasHidden = box && box.hidden;
       renderRun({ status: "queued", requested: count, generated: 0, rejected: 0, model: "" });
       if (box) box.hidden = false;
       setBusy(true);
@@ -298,57 +465,62 @@
       api("/api/ideas/generate", {
         method: "POST",
         body: { count: count, categories: chosen, auto: autoOn }
-      }).then(function (run) {
-        renderRun(run);
-        pollRun(run.id);
-      }).catch(function (err) {
-        setBusy(false);
-        if (box && wasHidden) box.hidden = true;
-        toast("Could not start", err.message, "error", 12000);
-      });
+      })
+        .then((run) => {
+          renderRun(run);
+          pollRun(run.id);
+        })
+        .catch((err) => {
+          setBusy(false);
+          if (box && wasHidden) box.hidden = true;
+          toast("Could not start", err.message, "error", 12000);
+        });
     });
 
-    var activeId = panel && panel.getAttribute("data-active-run");
+    const activeId = panel && panel.getAttribute("data-active-run");
     if (activeId) {
-      box && (box.hidden = false);
+      if (box) box.hidden = false;
       setBusy(true);
       pollRun(activeId);
     }
+    refreshSummary();
   }
 
   /* ----------------------------------------------------------------- filters */
   function initFilters() {
-    var input = $("[data-search]");
-    var cards = $$("[data-idea]");
-    if (!input || !cards.length) return;
+    const input = $("[data-search]");
+    if (!input) return;
 
-    var buttons = $$("[data-filter]");
-    var countEl = $("[data-result-count]");
-    var noMatch = $("[data-no-match]");
-    var filter = "all";
+    const buttons = Array.from(document.querySelectorAll("[data-filter]"));
+    const countEl = $("[data-result-count]");
+    const noMatch = $("[data-no-match]");
+    const initial = buttons.filter((btn) => btn.classList.contains("active"))[0];
+    let filter = initial ? initial.getAttribute("data-filter") : "all";
 
-    var apply = function () {
-      var query = input.value.trim().toLowerCase();
-      var shown = 0;
-      cards.forEach(function (card) {
-        var haystack = card.getAttribute("data-search") || "";
-        var matchesQuery = !query || haystack.indexOf(query) !== -1;
-        var matchesFilter = filter === "all" ||
+    const apply = () => {
+      const query = input.value.trim().toLowerCase();
+      const cards = Array.from(document.querySelectorAll("[data-idea]"));
+      let shown = 0;
+      cards.forEach((card) => {
+        const haystack = card.getAttribute("data-search") || "";
+        const matchesQuery = !query || haystack.indexOf(query) !== -1;
+        const matchesFilter =
+          filter === "all" ||
           (filter === "saved" && card.getAttribute("data-saved") === "true") ||
           (filter === "today" && card.getAttribute("data-today") === "true");
-        var visible = matchesQuery && matchesFilter;
+        const visible = matchesQuery && matchesFilter;
         card.classList.toggle("is-hidden", !visible);
         if (visible) shown += 1;
       });
       if (countEl) countEl.textContent = "Showing " + shown + " idea" + (shown === 1 ? "" : "s");
-      if (noMatch) noMatch.hidden = shown !== 0;
+      if (noMatch) noMatch.hidden = shown !== 0 || !cards.length;
     };
 
     input.addEventListener("input", apply);
     input.addEventListener("search", apply);
-    buttons.forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        buttons.forEach(function (other) {
+    buttons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        buttons.forEach((other) => {
           other.classList.toggle("active", other === btn);
           other.setAttribute("aria-pressed", other === btn ? "true" : "false");
         });
@@ -358,97 +530,153 @@
     });
 
     document.addEventListener("vs:changed", apply);
+    apply();
   }
 
   /* -------------------------------------------------------------- expand all */
   function initExpandAll() {
-    var btn = $("[data-expand-all]");
+    const btn = $("[data-expand-all]");
     if (!btn) return;
-    var details = $$("details[data-details]");
+    const details = $$("details[data-details]");
     if (!details.length) return;
-    btn.addEventListener("click", function () {
-      var anyClosed = details.some(function (item) { return !item.open; });
-      details.forEach(function (item) { item.open = anyClosed; });
+    btn.addEventListener("click", () => {
+      const anyClosed = details.some((item) => !item.open);
+      details.forEach((item) => {
+        item.open = anyClosed;
+      });
       btn.textContent = anyClosed ? "Collapse all" : "Expand all";
     });
   }
 
   /* -------------------------------------------------------------------- save */
+  function bumpStat(selector, delta) {
+    const el = $(selector);
+    if (!el) return;
+    const current = parseInt(el.textContent, 10);
+    if (!isNaN(current)) el.textContent = String(Math.max(0, current + delta));
+  }
+
   function initSave() {
-    $$("[data-save]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var id = btn.getAttribute("data-save");
+    $$("[data-save]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-save");
+        const wasSaved = btn.getAttribute("aria-pressed") === "true";
         btn.disabled = true;
         api("/api/ideas/" + encodeURIComponent(id) + "/save", { method: "POST" })
-          .then(function (out) {
-            var saved = !!out.saved;
+          .then((out) => {
+            const saved = !!out.saved;
             btn.classList.toggle("on", saved);
             btn.setAttribute("aria-pressed", saved ? "true" : "false");
+            btn.setAttribute("aria-label", saved ? "Remove from saved" : "Save idea");
             btn.title = saved ? "Remove from saved" : "Save this idea";
-            var card = btn.closest("[data-idea]");
+            const card = btn.closest("[data-idea]");
             if (card) card.setAttribute("data-saved", saved ? "true" : "false");
-            toast(saved ? "Saved" : "Removed",
+            if (saved !== wasSaved) bumpStat("[data-stat-saved]", saved ? 1 : -1);
+            toast(
+              saved ? "Saved" : "Removed",
               saved ? "Idea added to your saved list." : "Idea removed from saved.",
-              "good", 2600);
+              "good",
+              2600
+            );
             document.dispatchEvent(new CustomEvent("vs:changed"));
           })
-          .catch(function (err) { toast("Could not save", err.message, "error"); })
-          .then(function () { btn.disabled = false; });
+          .catch((err) => toast("Could not save", err.message, "error"))
+          .then(() => {
+            btn.disabled = false;
+          });
+      });
+    });
+  }
+
+  /* ------------------------------------------------------------------ delete */
+  function initDelete() {
+    $$("[data-delete]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-delete");
+        const title = btn.getAttribute("data-title") || "this idea";
+        confirmSheet({
+          title: "Delete this idea?",
+          message: "“" + title + "” will leave the library and its MP3 files will be erased. This cannot be undone.",
+          confirmLabel: "Delete",
+          danger: true
+        }).then((ok) => {
+          if (!ok) return;
+          btn.disabled = true;
+          api("/api/ideas/" + encodeURIComponent(id), { method: "DELETE" })
+            .then((out) => {
+              const card = btn.closest("[data-idea]");
+              const wasSaved = !!card && card.getAttribute("data-saved") === "true";
+              if (card) card.remove();
+              bumpStat("[data-stat-total]", -1);
+              if (wasSaved) bumpStat("[data-stat-saved]", -1);
+              const files = out && out.files_removed ? " " + out.files_removed + " audio file(s) removed." : "";
+              toast("Deleted", "Idea removed." + files, "good", 3200);
+              document.dispatchEvent(new CustomEvent("vs:changed"));
+            })
+            .catch((err) => toast("Could not delete", err.message, "error", 10000))
+            .then(() => {
+              btn.disabled = false;
+            });
+        });
       });
     });
   }
 
   /* -------------------------------------------------------------------- copy */
   function initCopy() {
-    $$("[data-copy]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var selector = btn.getAttribute("data-copy");
-        var target = selector ? document.querySelector(selector) : null;
+    $$("[data-copy]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const selector = btn.getAttribute("data-copy");
+        const target = selector ? document.querySelector(selector) : null;
         if (!target) {
           toast("Nothing to copy", "The source block is missing on this page.", "error");
           return;
         }
-        var text = (target.textContent || "").trim();
+        const text = (target.textContent || "").trim();
         if (!text) {
           toast("Nothing to copy", "That block is empty.", "warn");
           return;
         }
         copyText(text)
-          .then(function () { toast("Copied", "Copied " + text.length + " characters.", "good", 2400); })
-          .catch(function (err) { toast("Copy failed", err.message, "error"); });
+          .then(() => {
+            toast("Copied", "Copied " + text.length + " characters.", "good", 2400);
+          })
+          .catch((err) => toast("Copy failed", err.message, "error"));
       });
     });
   }
 
   /* -------------------------------------------------------------- regenerate */
   function initRegenerate() {
-    $$("[data-regen]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var id = btn.getAttribute("data-regen");
-        var original = btn.textContent;
+    $$("[data-regen]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-regen");
+        const original = btn.innerHTML;
         btn.disabled = true;
         btn.textContent = "Regenerating…";
         api("/api/ideas/" + encodeURIComponent(id) + "/regenerate", { method: "POST" })
-          .then(function (out) {
-            var title = out && out.idea && out.idea.title ? out.idea.title : "A fresh idea replaced the old one.";
+          .then((out) => {
+            const title = out && out.idea && out.idea.title ? out.idea.title : "A fresh idea replaced the old one.";
             toast("Regenerated", title, "good", 4000);
-            window.setTimeout(function () { window.location.reload(); }, 1200);
+            window.setTimeout(() => {
+              window.location.reload();
+            }, 1200);
           })
-          .catch(function (err) {
+          .catch((err) => {
             toast("Regenerate failed", err.message, "error", 12000);
             btn.disabled = false;
-            btn.textContent = original;
+            btn.innerHTML = original;
           });
       });
     });
   }
 
   /* ------------------------------------------------------------------ voices */
-  var voicesPromise = null;
+  let voicesPromise = null;
 
   function loadVoices() {
     if (!voicesPromise) {
-      voicesPromise = api("/api/voices").catch(function (err) {
+      voicesPromise = api("/api/voices").catch((err) => {
         voicesPromise = null;
         throw err;
       });
@@ -457,70 +685,70 @@
   }
 
   function fillVoiceSelects() {
-    var selects = $$("[data-voice-select]");
+    const selects = $$("[data-voice-select]");
     if (!selects.length) return;
-    loadVoices().then(function (data) {
-      var list = (data && data.voices) || [];
-      if (!list.length) {
-        var reason = data && data.configured
-          ? "No voices on this account"
-          : "Add an ElevenLabs key in Config";
-        selects.forEach(function (select) {
+    loadVoices()
+      .then((data) => {
+        const list = (data && data.voices) || [];
+        if (!list.length) {
+          const reason = data && data.configured ? "No voices on this account" : "Add an ElevenLabs key in Config";
+          selects.forEach((select) => {
+            select.textContent = "";
+            const opt = document.createElement("option");
+            opt.value = "";
+            opt.textContent = reason;
+            select.appendChild(opt);
+            select.disabled = true;
+          });
+          return;
+        }
+        selects.forEach((select) => {
+          const current = select.value;
           select.textContent = "";
-          var opt = document.createElement("option");
+          list.forEach((voice) => {
+            const opt = document.createElement("option");
+            opt.value = voice.id;
+            const bits = [voice.name || voice.id];
+            if (voice.gender) bits.push(voice.gender);
+            if (voice.accent) bits.push(voice.accent);
+            opt.textContent = bits.join(" · ");
+            if (voice.preview_url) opt.setAttribute("data-preview", voice.preview_url);
+            select.appendChild(opt);
+          });
+          const preferred = current || (data && data.default) || "";
+          const exists = list.some((voice) => voice.id === preferred);
+          if (preferred && exists) select.value = preferred;
+        });
+      })
+      .catch((err) => {
+        selects.forEach((select) => {
+          select.textContent = "";
+          const opt = document.createElement("option");
           opt.value = "";
-          opt.textContent = reason;
+          opt.textContent = "Voice list unavailable";
           select.appendChild(opt);
           select.disabled = true;
         });
-        return;
-      }
-      selects.forEach(function (select) {
-        var current = select.value;
-        select.textContent = "";
-        list.forEach(function (voice) {
-          var opt = document.createElement("option");
-          opt.value = voice.id;
-          var bits = [voice.name || voice.id];
-          if (voice.gender) bits.push(voice.gender);
-          if (voice.accent) bits.push(voice.accent);
-          opt.textContent = bits.join(" · ");
-          if (voice.preview_url) opt.setAttribute("data-preview", voice.preview_url);
-          select.appendChild(opt);
-        });
-        var preferred = current || (data && data.default) || "";
-        var exists = list.some(function (voice) { return voice.id === preferred; });
-        if (preferred && exists) select.value = preferred;
+        toast("Voice list failed", err.message, "error", 9000);
       });
-    }).catch(function (err) {
-      selects.forEach(function (select) {
-        select.textContent = "";
-        var opt = document.createElement("option");
-        opt.value = "";
-        opt.textContent = "Voice list unavailable";
-        select.appendChild(opt);
-        select.disabled = true;
-      });
-      toast("Voice list failed", err.message, "error", 9000);
-    });
   }
 
   function initVoicePanels() {
-    $$("[data-speed]").forEach(function (range) {
-      var panel = range.closest("[data-voice-panel]") || range.closest(".voice-grid");
-      var out = panel ? $("[data-speed-label]", panel) : null;
-      var sync = function () {
-        var value = parseFloat(range.value);
+    $$("[data-speed]").forEach((range) => {
+      const panel = range.closest("[data-voice-panel]") || range.closest(".voice-grid");
+      const out = panel ? $("[data-speed-label]", panel) : null;
+      const sync = () => {
+        const value = parseFloat(range.value);
         if (out) out.textContent = String(isNaN(value) ? range.value : value) + "×";
       };
       range.addEventListener("input", sync);
       sync();
     });
 
-    $$("[data-voice-toggle]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var id = btn.getAttribute("data-voice-toggle");
-        var details = document.querySelector('details[data-details="' + id + '"]');
+    $$("[data-voice-toggle]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-voice-toggle");
+        const details = document.querySelector('details[data-details="' + id + '"]');
         if (details) {
           details.open = true;
           details.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -528,51 +756,55 @@
       });
     });
 
-    $$("[data-voice]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var id = btn.getAttribute("data-voice");
-        var panel = btn.closest("[data-voice-panel]") ||
-          document.querySelector('[data-voice-panel="' + id + '"]');
-        var select = panel ? $("[data-voice-select]", panel) : null;
-        var emotion = panel ? $("[data-emotion-select]", panel) : null;
-        var speed = panel ? $("[data-speed]", panel) : null;
-        var result = document.querySelector('[data-voice-result="' + id + '"]');
-        var download = panel ? $("[data-voice-download]", panel) : null;
-        var original = btn.textContent;
+    $$("[data-voice]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-voice");
+        const panel =
+          btn.closest("[data-voice-panel]") || document.querySelector('[data-voice-panel="' + id + '"]');
+        const select = panel ? $("[data-voice-select]", panel) : null;
+        const emotion = panel ? $("[data-emotion-select]", panel) : null;
+        const speed = panel ? $("[data-speed]", panel) : null;
+        const result = document.querySelector('[data-voice-result="' + id + '"]');
+        const download = panel ? $("[data-voice-download]", panel) : null;
+        const original = btn.innerHTML;
 
         btn.disabled = true;
         btn.textContent = "Generating…";
         if (result) {
           result.textContent = "";
-          var note = document.createElement("p");
+          const note = document.createElement("p");
           note.className = "voice-meta";
           note.textContent = "Synthesising Hindi speech — this can take a few seconds.";
           result.appendChild(note);
         }
 
-        var body = { voice_id: null, emotion: null, speed: null };
+        const body = { voice_id: null, emotion: null, speed: null };
         if (select && select.value) body.voice_id = select.value;
         if (emotion && emotion.value) body.emotion = emotion.value;
         if (speed && speed.value) {
-          var parsed = parseFloat(speed.value);
+          const parsed = parseFloat(speed.value);
           if (!isNaN(parsed)) body.speed = parsed;
         }
 
         api("/api/ideas/" + encodeURIComponent(id) + "/voice", { method: "POST", body: body })
-          .then(function (out) {
+          .then((out) => {
             if (result) {
               result.textContent = "";
-              var audio = document.createElement("audio");
+              const audio = document.createElement("audio");
               audio.controls = true;
               audio.preload = "none";
               audio.src = out.url;
               result.appendChild(audio);
 
-              var meta = document.createElement("p");
+              const meta = document.createElement("p");
               meta.className = "voice-meta";
-              var size = out.bytes ? Math.max(1, Math.round(out.bytes / 1024)) + " KB" : "";
-              var bits = [out.voice_name || out.voice_id, out.model_id, out.speed + "×",
-                out.chars + " characters"];
+              const size = out.bytes ? Math.max(1, Math.round(out.bytes / 1024)) + " KB" : "";
+              const bits = [
+                out.voice_name || out.voice_id,
+                out.model_id,
+                out.speed + "×",
+                out.chars + " characters"
+              ];
               if (size) bits.push(size);
               meta.textContent = bits.filter(Boolean).join(" · ");
               result.appendChild(meta);
@@ -583,19 +815,19 @@
             }
             toast("Voice ready", "Hindi voiceover generated. Press play to preview.", "good", 4000);
           })
-          .catch(function (err) {
+          .catch((err) => {
             if (result) {
               result.textContent = "";
-              var problem = document.createElement("p");
+              const problem = document.createElement("p");
               problem.className = "voice-meta bad";
               problem.textContent = err.message;
               result.appendChild(problem);
             }
             toast("Voice generation failed", err.message, "error", 14000);
           })
-          .then(function () {
+          .then(() => {
             btn.disabled = false;
-            btn.textContent = original;
+            btn.innerHTML = original;
           });
       });
     });
@@ -605,11 +837,11 @@
 
   /* -------------------------------------------------------------- config page */
   function initConfigTests() {
-    var out = $("[data-test-out]");
-    $$("[data-test]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var kind = btn.getAttribute("data-test");
-        var original = btn.textContent;
+    const out = $("[data-test-out]");
+    $$("[data-test]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const kind = btn.getAttribute("data-test");
+        const original = btn.textContent;
         btn.disabled = true;
         btn.textContent = "Testing…";
         if (out) {
@@ -618,7 +850,7 @@
           out.textContent = "Contacting the provider…";
         }
         api("/api/test/" + encodeURIComponent(kind), { method: "POST" })
-          .then(function (data) {
+          .then((data) => {
             if (out) {
               out.textContent = JSON.stringify(data, null, 2);
               out.classList.add(data && data.ok ? "ok" : "fail");
@@ -626,17 +858,22 @@
             if (data && data.ok) {
               toast("Key works", data.reason || "The provider accepted the saved key.", "good", 8000);
             } else {
-              toast("Test failed", (data && (data.reason || data.message)) || "The provider rejected the key.", "error", 10000);
+              toast(
+                "Test failed",
+                (data && (data.reason || data.message)) || "The provider rejected the key.",
+                "error",
+                10000
+              );
             }
           })
-          .catch(function (err) {
+          .catch((err) => {
             if (out) {
               out.className = "test-out fail";
               out.textContent = err.message;
             }
             toast("Test failed", err.message, "error", 10000);
           })
-          .then(function () {
+          .then(() => {
             btn.disabled = false;
             btn.textContent = original;
           });
@@ -644,14 +881,40 @@
     });
   }
 
+  /* --------------------------------------------------------------- shortcuts */
+  function initShortcuts() {
+    document.addEventListener("keydown", (event) => {
+      const tag = (event.target && event.target.tagName) || "";
+      const typing = /INPUT|TEXTAREA|SELECT/.test(tag) || (event.target && event.target.isContentEditable);
+      if (event.key === "/" && !typing) {
+        const search = $("[data-search]");
+        if (search) {
+          event.preventDefault();
+          search.focus();
+          search.select();
+        }
+      }
+      if (event.key === "Escape" && typing && event.target === $("[data-search]")) {
+        const search = $("[data-search]");
+        if (search && search.value) {
+          search.value = "";
+          search.dispatchEvent(new Event("input"));
+        }
+      }
+    });
+  }
+
   /* --------------------------------------------------------------------- boot */
+  initTheme();
   startClock();
   initGenerator();
   initFilters();
   initExpandAll();
   initSave();
+  initDelete();
   initCopy();
   initRegenerate();
   initVoicePanels();
   initConfigTests();
+  initShortcuts();
 })();

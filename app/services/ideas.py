@@ -13,13 +13,14 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import SessionLocal
-from app.models import Idea, Run
+from app.models import Idea, Run, Voiceover
 from app.services import hackerai
 from app.services.hackerai import ProviderError
 from app.store import HACKER_AI_API_KEY, effective, get_secret
@@ -269,6 +270,35 @@ def regenerate(db: Session, idea_id: int) -> Idea:
     return new_idea
 
 
+# ------------------------------------------------------------------------- delete
+def delete_idea(db: Session, idea_id: int) -> int:
+    """Soft-delete an idea and erase its audio files.
+
+    The row is kept as a tombstone so run counters stay accurate, but it is
+    excluded from every listing and its MP3s are removed from disk. Returns the
+    number of audio files removed.
+    """
+    idea = db.get(Idea, idea_id)
+    if idea is None or idea.status == "deleted":
+        raise ValueError("Idea not found.")
+
+    removed = 0
+    for item in list(idea.voiceovers):
+        if item.path:
+            path = Path(item.path)
+            try:
+                if path.is_file():
+                    path.unlink()
+                    removed += 1
+            except OSError:
+                logger.warning("Could not remove voiceover file %s", path)
+        db.delete(item)
+    idea.status = "deleted"
+    idea.replaced_by = None
+    db.commit()
+    return removed
+
+
 # ------------------------------------------------------------------------- search
 def list_ideas(
     db: Session,
@@ -282,20 +312,25 @@ def list_ideas(
         stmt = stmt.where(Idea.saved.is_(True))
     if run_id:
         stmt = stmt.where(Idea.run_id == run_id)
+
+    # Filter in SQL, then limit. Filtering a limited page in Python meant search only
+    # ever looked at the newest N rows and silently missed older ideas.
+    needle = (query or "").strip()
+    if needle:
+        pattern = f"%{needle.lower()}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(Idea.title).like(pattern),
+                func.lower(Idea.hook).like(pattern),
+                func.lower(Idea.script_hi).like(pattern),
+                func.lower(Idea.category).like(pattern),
+                func.lower(Idea.hashtags_json).like(pattern),
+                func.lower(Idea.description).like(pattern),
+            )
+        )
+
     stmt = stmt.order_by(Idea.created_at.desc(), Idea.id.desc()).limit(max(1, min(limit, 500)))
-    rows = list(db.scalars(stmt).all())
-    if query:
-        needle = query.strip().lower()
-        rows = [
-            idea
-            for idea in rows
-            if needle in idea.title.lower()
-            or needle in idea.hook.lower()
-            or needle in idea.script_hi.lower()
-            or needle in (idea.category or "").lower()
-            or any(needle in tag.lower() for tag in idea.hashtags)
-        ]
-    return rows
+    return list(db.scalars(stmt).all())
 
 
 def stats(db: Session) -> dict:
@@ -311,5 +346,8 @@ def stats(db: Session) -> dict:
         )
         or 0,
         "runs": db.scalar(select(func.count(Run.id))) or 0,
-        "voiceovers": db.scalar(select(func.count()).select_from(Idea).where(active)) or 0,
+        "voiceovers": db.scalar(
+            select(func.count(Voiceover.id)).where(Voiceover.status == "ready")
+        )
+        or 0,
     }

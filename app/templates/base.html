@@ -1,52 +1,88 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="{{ theme or 'dark' }}">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}AI Viral Shorts Idea Generator{% endblock %}</title>
   <meta name="description" content="AI-powered Hindi YouTube Shorts idea generator with ElevenLabs voiceovers.">
+  <meta name="theme-color" content="#f2f2f7">
+  <meta name="color-scheme" content="light dark">
   <link rel="stylesheet" href="/static/app.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230a84ff'/><path d='M53 16 28 55h18l-4 29 28-42H52z' fill='%23fff'/></svg>">
 </head>
 <body data-page="{% block page %}{% endblock %}">
-  <div class="aurora" aria-hidden="true"></div>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="/" aria-label="ViralShorts Ideas home">
+          <span class="brand-mark" aria-hidden="true">VS</span>
+          <span class="brand-text">Viral<span>Shorts</span> <em>Ideas</em></span>
+        </a>
 
-  <header class="topbar">
-    <a class="brand" href="/">
-      <span class="brand-mark">VS</span>
-      <span class="brand-text">Viral<span>Shorts</span> <em>Ideas</em></span>
-    </a>
+        <nav class="nav-desktop" aria-label="Primary">
+          <a class="nav-link {% if path == '/' %}active{% endif %}" href="/">Studio</a>
+          <a class="nav-link {% if path == '/history' %}active{% endif %}" href="/history">History</a>
+          <a class="nav-link {% if path == '/config' %}active{% endif %}" href="/config">Config</a>
+        </nav>
 
-    <nav class="nav">
-      <a href="/" class="{% if path == '/' %}active{% endif %}">Dashboard</a>
-      <a href="/history" class="{% if path == '/history' %}active{% endif %}">History</a>
-      <a href="/config" class="{% if path == '/config' %}active{% endif %}">Config</a>
-    </nav>
-
-    <div class="top-right">
-      <div class="clock" title="Asia/Kolkata (IST)">
-        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2m1 10.6 3.7 2.1-.8 1.3-4.6-2.7V6h1.7z"/></svg>
-        <span data-clock-date>{{ clock.date }}</span>
-        <span class="clock-time" data-clock-time>{{ clock.time }}</span>
-        <span class="clock-zone">IST</span>
+        <div class="topbar-actions">
+          <button class="icon-btn" type="button" data-theme-toggle aria-label="Switch appearance" title="Appearance">
+            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2m0 2.2v15.6a7.8 7.8 0 0 1 0-15.6"/></svg>
+          </button>
+          {% if user %}
+          <span class="avatar" title="{{ user }}" aria-hidden="true">{{ user[0]|upper }}</span>
+          {% endif %}
+          <form method="post" action="/logout">
+            <button class="icon-btn" type="submit" aria-label="Log out" title="Log out">
+              <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path fill="currentColor" d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4v-2H6V5h4zm5.6 4.4L14.2 8.8 16.4 11H9v2h7.4l-2.2 2.2 1.4 1.4L20 12z"/></svg>
+            </button>
+          </form>
+        </div>
       </div>
-      <form method="post" action="/logout">
-        <button class="btn ghost small" type="submit">Log out</button>
-      </form>
+    </header>
+
+    <main class="page">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="foot">
+      <span>Ideas are generated live by Hacker AI. Nothing is templated or faked.</span>
+      <span class="dot">·</span>
+      <span>Voice by ElevenLabs</span>
+    </footer>
+  </div>
+
+  <nav class="tabbar" aria-label="Mobile navigation">
+    <a class="tab {% if path == '/' %}active{% endif %}" href="/">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.6 2.5 10v11h7v-6h5v6h7V10z"/></svg>
+      <span>Studio</span>
+    </a>
+    <a class="tab {% if path == '/history' %}active{% endif %}" href="/history">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10h-2a8 8 0 1 1-2.3-5.6L14 10h8V2l-2.9 2.9A9.96 9.96 0 0 0 12 2m-1 5v6l5 3 .9-1.6-4-2.3V7z"/></svg>
+      <span>History</span>
+    </a>
+    <a class="tab {% if path == '/config' %}active{% endif %}" href="/config">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h11a3 3 0 0 1 6 0h1v2h-1a3 3 0 0 1-6 0H3zm0 6h3a3 3 0 0 1 6 0h9v2h-9a3 3 0 0 1-6 0H3zm0 6h13a3 3 0 0 1 6 0v2a3 3 0 0 1-6 0H3z"/></svg>
+      <span>Config</span>
+    </a>
+    <button class="tab" type="button" data-theme-toggle aria-label="Switch appearance">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2m0 2.2v15.6a7.8 7.8 0 0 1 0-15.6"/></svg>
+      <span>Theme</span>
+    </button>
+  </nav>
+
+  <dialog class="sheet" id="confirm-dialog" aria-labelledby="confirm-title">
+    <div class="sheet-body">
+      <h2 id="confirm-title">Are you sure?</h2>
+      <p id="confirm-message"></p>
     </div>
-  </header>
+    <div class="sheet-actions">
+      <button type="button" id="confirm-cancel">Cancel</button>
+      <button type="button" class="danger" id="confirm-ok">Delete</button>
+    </div>
+  </dialog>
 
-  <main class="wrap">
-    {% block content %}{% endblock %}
-  </main>
-
-  <footer class="foot">
-    <span>Ideas are generated live by Hacker AI. Nothing is templated or faked.</span>
-    <span class="dot">·</span>
-    <span>Voice by ElevenLabs</span>
-  </footer>
-
-  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="toasts" class="toasts" aria-live="polite" role="status"></div>
   <script src="/static/app.js" defer></script>
   {% block scripts %}{% endblock %}
 </body>

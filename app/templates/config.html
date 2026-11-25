@@ -48,7 +48,7 @@
     </label>
     <label class="check"><input type="checkbox" name="clear_elevenlabs" value="1"> Remove the saved ElevenLabs key</label>
 
-    <h2>Defaults</h2>
+    <h2>Model &amp; endpoint</h2>
     <div class="two-col tight">
       <label class="field">
         <span class="field-label">Hacker AI model</span>
@@ -58,10 +58,11 @@
       <label class="field">
         <span class="field-label">Hacker AI base URL</span>
         <input name="hacker_ai_base_url" value="{{ values.hacker_ai_base_url }}" spellcheck="false">
-        <small class="muted">OpenAI-compatible endpoint.</small>
+        <small class="muted">OpenAI-compatible endpoint. Must be HTTPS; localhost is only allowed with the insecure-base-URL environment flag.</small>
       </label>
     </div>
 
+    <h2>Voice defaults</h2>
     <label class="field">
       <span class="field-label">ElevenLabs voice</span>
       {% if voices %}
@@ -101,7 +102,7 @@
       </select>
     </label>
 
-    <button class="btn primary" type="submit">Save configuration</button>
+    <button class="btn btn-primary" type="submit">Save configuration</button>
   </form>
 
   <div class="stack">
@@ -109,8 +110,8 @@
       <h2>Connection tests</h2>
       <p class="muted tiny">Tests use the saved keys. Save first, then test.</p>
       <div class="row">
-        <button class="btn ghost" type="button" data-test="hackerai">Test Hacker AI</button>
-        <button class="btn ghost" type="button" data-test="elevenlabs">Test ElevenLabs</button>
+        <button class="btn btn-ghost btn-sm" type="button" data-test="hackerai">Test Hacker AI</button>
+        <button class="btn btn-ghost btn-sm" type="button" data-test="elevenlabs">Test ElevenLabs</button>
       </div>
       <div class="test-out" data-test-out hidden></div>
     </section>
@@ -136,17 +137,18 @@
       {% elif account_error %}
         <div class="banner error"><strong>Account check failed</strong><p>{{ account_error }}</p></div>
       {% else %}
-        <p class="muted">Add an ElevenLabs key to see plan and character usage.</p>
+        <p class="muted tiny">Add an ElevenLabs key to see plan and character usage.</p>
       {% endif %}
     </section>
 
     <section class="panel">
-      <h2>Notes</h2>
+      <h2>How it works</h2>
       <ul class="notes">
         <li>Keys live in the local database, encrypted. This app has no analytics and sends no telemetry.</li>
         <li>Every idea is validated: Hindi must be Devanagari, scenes and subtitles must be present, hashtags must exist.</li>
         <li>A prose reply from the model is treated as an error, never turned into ideas.</li>
         <li>Voice generation consumes ElevenLabs characters from your plan.</li>
+        <li>Generate, voice and provider-test requests are rate limited per session.</li>
       </ul>
     </section>
   </div>

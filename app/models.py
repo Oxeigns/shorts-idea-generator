@@ -41,7 +41,17 @@ class Idea(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
 
-    voiceovers: Mapped[list["Voiceover"]] = relationship(back_populates="idea", cascade="all, delete-orphan")
+    # order_by matters: as_dict() shows the newest voiceover, and without an explicit
+    # order SQLite is free to return these rows in any order after a reload.
+    voiceovers: Mapped[list["Voiceover"]] = relationship(
+        back_populates="idea", cascade="all, delete-orphan", order_by="Voiceover.id"
+    )
+
+    @property
+    def latest_voiceover(self) -> "Voiceover | None":
+        """The newest ready voiceover, or None. Order-independent by construction."""
+        ready = [item for item in self.voiceovers if item.status == "ready"]
+        return max(ready, key=lambda item: item.id) if ready else None
 
     @property
     def scenes(self) -> list[dict]:
@@ -68,7 +78,7 @@ class Idea(Base):
             return []
 
     def as_dict(self) -> dict:
-        latest = self.voiceovers[-1] if self.voiceovers else None
+        latest = self.latest_voiceover
         return {
             "id": self.id,
             "run_id": self.run_id,

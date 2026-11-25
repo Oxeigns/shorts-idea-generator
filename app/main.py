@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
@@ -15,9 +17,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app import netguard
 from app.config import settings
 from app.db import SessionLocal, get_session, init_db
 from app.models import Idea, Run, Voiceover
+from app.ratelimit import SlidingWindow
 from app.security import (
     read_session,
     safe_next,
@@ -61,6 +65,68 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="AI Viral Shorts Idea Generator", version="1.0.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 
+# No template uses an inline script, inline style or inline handler, so the strict
+# policy below can stay free of 'unsafe-inline'. The favicon is a data: URI.
+CSP = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self'; "
+    "img-src 'self' data:; "
+    "media-src 'self'; "
+    "font-src 'self'; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'none'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    if settings.security_headers:
+        response.headers.setdefault("Content-Security-Policy", CSP)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault(
+            "Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()"
+        )
+        forwarded = (request.headers.get("x-forwarded-proto") or "").lower()
+        if settings.hsts and (request.url.scheme == "https" or forwarded == "https"):
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+    return response
+
+
+# ------------------------------------------------------------------- rate limits
+# Requests that cost money or provider quota are limited per signed-in user + IP.
+LIMITERS: dict[str, SlidingWindow] = {
+    "generate": SlidingWindow(6, 300),
+    "voice": SlidingWindow(20, 600),
+    "regenerate": SlidingWindow(20, 600),
+    "probe": SlidingWindow(12, 60),
+}
+
+
+def reset_rate_limits() -> None:
+    for limiter in LIMITERS.values():
+        limiter.reset()
+
+
+def _limit(name: str, request: Request) -> None:
+    user = _user(request) or "anonymous"
+    ip = request.client.host if request.client else "unknown"
+    wait = LIMITERS[name].hit(f"{name}:{user}:{ip}")
+    if wait:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many requests. Try again in {wait} seconds.",
+            headers={"Retry-After": str(wait)},
+        )
+
 
 # --------------------------------------------------------------------------- auth
 def _user(request: Request) -> str | None:
@@ -72,6 +138,14 @@ def require_api(request: Request) -> str:
     if not user:
         raise HTTPException(status_code=401, detail="Sign in to use this endpoint.")
     return user
+
+
+THEMES = {"dark", "light", "system"}
+
+
+def _theme(request: Request) -> str:
+    value = (request.cookies.get("theme") or "").strip().lower()
+    return value if value in THEMES else "dark"
 
 
 def _page(request: Request, name: str, **ctx) -> HTMLResponse:
@@ -89,6 +163,7 @@ def _page(request: Request, name: str, **ctx) -> HTMLResponse:
         "categories": hackerai.CATEGORIES,
         "emotions": hackerai.EMOTIONS,
         "cfg": settings,
+        "theme": _theme(request),
     }
     payload.update(ctx)
     return templates.TemplateResponse(request, name, payload)
@@ -112,7 +187,13 @@ def login_page(request: Request, next: str = "/"):
     return templates.TemplateResponse(
         request,
         "login.html",
-        {"request": request, "next": safe_next(next), "error": "", "clock": ist_clock_now()},
+        {
+            "request": request,
+            "next": safe_next(next),
+            "error": "",
+            "clock": ist_clock_now(),
+            "theme": _theme(request),
+        },
     )
 
 
@@ -133,6 +214,7 @@ def login_submit(
                 "next": safe_next(next),
                 "error": "Too many attempts. Wait five minutes.",
                 "clock": ist_clock_now(),
+                "theme": _theme(request),
             },
             status_code=429,
         )
@@ -146,6 +228,7 @@ def login_submit(
                 "next": safe_next(next),
                 "error": "Wrong username or password.",
                 "clock": ist_clock_now(),
+                "theme": _theme(request),
             },
             status_code=401,
         )
@@ -278,6 +361,37 @@ def config_save(
     clear_elevenlabs: str = Form(""),
 ):
     require_api(request)
+
+    # Validate everything before writing, so a rejected value never leaves the
+    # configuration half updated.
+    model = (hacker_ai_model or "").strip() or "auto"
+    if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,64}", model):
+        return RedirectResponse(
+            "/config?error=" + quote("Model name contains unsupported characters."), status_code=303
+        )
+    try:
+        base_url = netguard.validate_base_url(hacker_ai_base_url.strip() or settings.hackerai_base_url)
+    except netguard.InvalidBaseURL as exc:
+        return RedirectResponse("/config?error=" + quote(str(exc)), status_code=303)
+
+    voice = (elevenlabs_voice_id or "").strip() or settings.elevenlabs_voice_id
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", voice):
+        return RedirectResponse(
+            "/config?error=" + quote("Voice ID may only contain letters, digits, dashes and underscores."),
+            status_code=303,
+        )
+    voice_model = (elevenlabs_model_id or "").strip() or settings.elevenlabs_model_id
+    if not re.fullmatch(r"[A-Za-z0-9._-]{2,64}", voice_model):
+        return RedirectResponse(
+            "/config?error=" + quote("ElevenLabs model ID is not valid."), status_code=303
+        )
+
+    try:
+        speed = max(0.7, min(1.2, float(default_speed)))
+    except ValueError:
+        speed = 1.0
+    emotion = default_emotion if default_emotion in hackerai.EMOTIONS else "energetic"
+
     if clear_hacker_ai:
         set_secret(db, HACKER_AI_API_KEY, "")
     if hacker_ai_api_key.strip():
@@ -287,16 +401,12 @@ def config_save(
     if elevenlabs_api_key.strip():
         set_secret(db, ELEVENLABS_API_KEY, elevenlabs_api_key)
 
-    put_setting(db, "hacker_ai_model", hacker_ai_model.strip() or "auto")
-    put_setting(db, "hacker_ai_base_url", (hacker_ai_base_url.strip() or settings.hackerai_base_url).rstrip("/"))
-    put_setting(db, "elevenlabs_voice_id", elevenlabs_voice_id.strip() or settings.elevenlabs_voice_id)
-    put_setting(db, "elevenlabs_model_id", elevenlabs_model_id.strip() or settings.elevenlabs_model_id)
-    try:
-        speed = max(0.7, min(1.2, float(default_speed)))
-    except ValueError:
-        speed = 1.0
+    put_setting(db, "hacker_ai_model", model)
+    put_setting(db, "hacker_ai_base_url", base_url)
+    put_setting(db, "elevenlabs_voice_id", voice)
+    put_setting(db, "elevenlabs_model_id", voice_model)
     put_setting(db, "default_speed", f"{speed:.2f}")
-    put_setting(db, "default_emotion", default_emotion if default_emotion in hackerai.EMOTIONS else "energetic")
+    put_setting(db, "default_emotion", emotion)
     _voice_cache.clear()
     return RedirectResponse("/config?saved=1", status_code=303)
 
@@ -330,6 +440,7 @@ def generate(payload: GenerateRequest, request: Request, db: Session = Depends(g
     require_api(request)
     if payload.count not in idea_service.ALLOWED_COUNTS:
         raise HTTPException(400, "Choose 10, 20 or 50 ideas.")
+    _limit("generate", request)
     if not get_secret(db, HACKER_AI_API_KEY):
         raise HTTPException(
             400,
@@ -364,16 +475,27 @@ def ideas_json(request: Request, db: Session = Depends(get_session), q: str = ""
 def toggle_save(idea_id: int, request: Request, db: Session = Depends(get_session)):
     require_api(request)
     idea = db.get(Idea, idea_id)
-    if idea is None:
+    if idea is None or idea.status != "active":
         raise HTTPException(404, "Idea not found.")
     idea.saved = not idea.saved
     db.commit()
     return {"id": idea.id, "saved": idea.saved}
 
 
+@app.delete("/api/ideas/{idea_id}")
+def delete_idea(idea_id: int, request: Request, db: Session = Depends(get_session)):
+    require_api(request)
+    try:
+        files = idea_service.delete_idea(db, idea_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"ok": True, "deleted": idea_id, "files_removed": files}
+
+
 @app.post("/api/ideas/{idea_id}/regenerate")
 def regenerate(idea_id: int, request: Request, db: Session = Depends(get_session)):
     require_api(request)
+    _limit("regenerate", request)
     if not get_secret(db, HACKER_AI_API_KEY):
         raise HTTPException(400, "No Hacker AI key saved. Open Config first.")
     try:
@@ -415,6 +537,7 @@ def voices_api(request: Request, db: Session = Depends(get_session), refresh: in
 @app.post("/api/ideas/{idea_id}/voice")
 def make_voice(idea_id: int, payload: VoiceRequest, request: Request, db: Session = Depends(get_session)):
     require_api(request)
+    _limit("voice", request)
     idea = db.get(Idea, idea_id)
     if idea is None:
         raise HTTPException(404, "Idea not found.")
@@ -517,6 +640,7 @@ def voice_download(voice_id: int, request: Request, db: Session = Depends(get_se
 @app.post("/api/test/hackerai")
 def test_hackerai(request: Request, db: Session = Depends(get_session)):
     require_api(request)
+    _limit("probe", request)
     key = get_secret(db, HACKER_AI_API_KEY)
     base = effective(db, "hacker_ai_base_url", settings.hackerai_base_url)
     model = effective(db, "hacker_ai_model", settings.hackerai_model)
@@ -526,6 +650,7 @@ def test_hackerai(request: Request, db: Session = Depends(get_session)):
 @app.post("/api/test/elevenlabs")
 def test_elevenlabs(request: Request, db: Session = Depends(get_session)):
     require_api(request)
+    _limit("probe", request)
     key = get_secret(db, ELEVENLABS_API_KEY)
     if not key:
         return {"ok": False, "reason": "No ElevenLabs key saved."}
@@ -562,8 +687,52 @@ def meta(request: Request, db: Session = Depends(get_session)):
     }
 
 
+@app.exception_handler(HTTPException)
+async def http_error(request: Request, exc: HTTPException):  # noqa: ANN001
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(
+            {"detail": exc.detail}, status_code=exc.status_code, headers=getattr(exc, "headers", None)
+        )
+    if exc.status_code == 401:
+        return RedirectResponse("/login", status_code=303)
+    return templates.TemplateResponse(
+        request,
+        "error.html",
+        {
+            "request": request,
+            "code": exc.status_code,
+            "message": str(exc.detail),
+            "clock": ist_clock_now(),
+            "theme": _theme(request),
+        },
+        status_code=exc.status_code,
+    )
+
+
 @app.exception_handler(404)
 def not_found(request: Request, exc: HTTPException):  # noqa: ANN001
     if request.url.path.startswith("/api/"):
         return JSONResponse({"detail": "Not found"}, status_code=404)
     return RedirectResponse("/", status_code=303)
+
+
+@app.exception_handler(Exception)
+async def unhandled(request: Request, exc: Exception):  # noqa: ANN001
+    logger.exception("Unhandled error on %s", request.url.path)
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(
+            {"detail": "The server hit an unexpected error. It has been logged; check the console."},
+            status_code=500,
+        )
+    return templates.TemplateResponse(
+        request,
+        "error.html",
+        {
+            "request": request,
+            "code": 500,
+            "message": "The server hit an unexpected error. It has been logged; check the console.",
+            "clock": ist_clock_now(),
+            "theme": _theme(request),
+        },
+        status_code=500,
+    )

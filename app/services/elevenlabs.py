@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 
 import httpx
 
@@ -21,6 +22,43 @@ EMOTION_PRESETS: dict[str, dict[str, float]] = {
     "warm": {"stability": 0.6, "style": 0.25, "similarity_boost": 0.8},
     "neutral": {"stability": 0.5, "style": 0.0, "similarity_boost": 0.75},
 }
+
+
+RETRY_STATUS = {429, 500, 502, 503, 504}
+MAX_ATTEMPTS = 2
+
+
+def _sleep(seconds: float) -> None:
+    time.sleep(seconds)
+
+
+def _request(client: httpx.Client, method: str, url: str, **kwargs) -> httpx.Response:
+    """One retry for throttling or a transient server error."""
+    last_exc: Exception | None = None
+    response: httpx.Response | None = None
+    call = getattr(client, method.lower())
+    for attempt in range(MAX_ATTEMPTS):
+        try:
+            response = call(url, **kwargs)
+        except httpx.TransportError as exc:
+            last_exc = exc
+            if attempt == MAX_ATTEMPTS - 1:
+                raise
+            _sleep(0.5)
+            continue
+        if response.status_code in RETRY_STATUS and attempt < MAX_ATTEMPTS - 1:
+            header = (response.headers.get("retry-after") or "").strip()
+            try:
+                delay = float(header)
+            except ValueError:
+                delay = 0.0
+            _sleep(min(delay, 8.0) if delay > 0 else 0.9)
+            continue
+        return response
+    if last_exc is not None:
+        raise last_exc
+    assert response is not None
+    return response
 
 
 class ElevenLabsError(RuntimeError):
@@ -74,7 +112,7 @@ def list_voices(key: str, timeout: float = 30) -> list[dict]:
         raise ElevenLabsError("ElevenLabs API key is not configured.", status=400)
     try:
         with httpx.Client(timeout=timeout) as client:
-            response = client.get(f"{BASE}/voices", headers={"xi-api-key": key})
+            response = _request(client, "GET", f"{BASE}/voices", headers={"xi-api-key": key})
     except httpx.HTTPError as exc:
         raise ElevenLabsError(f"ElevenLabs is unreachable: {exc}") from exc
     if response.status_code >= 400:
@@ -102,7 +140,7 @@ def account(key: str, timeout: float = 20) -> dict:
         raise ElevenLabsError("ElevenLabs API key is not configured.", status=400)
     try:
         with httpx.Client(timeout=timeout) as client:
-            response = client.get(f"{BASE}/user", headers={"xi-api-key": key})
+            response = _request(client, "GET", f"{BASE}/user", headers={"xi-api-key": key})
     except httpx.HTTPError as exc:
         raise ElevenLabsError(f"ElevenLabs is unreachable: {exc}") from exc
     if response.status_code >= 400:
@@ -152,7 +190,13 @@ def synthesize(
     url = f"{BASE}/text-to-speech/{voice_id}"
     try:
         with httpx.Client(timeout=timeout or settings.request_timeout) as client:
-            response = client.post(url, headers={"xi-api-key": key, "Content-Type": "application/json"}, json=payload)
+            response = _request(
+                client,
+                "POST",
+                url,
+                headers={"xi-api-key": key, "Content-Type": "application/json"},
+                json=payload,
+            )
     except httpx.HTTPError as exc:
         raise ElevenLabsError(f"ElevenLabs is unreachable: {exc}") from exc
 

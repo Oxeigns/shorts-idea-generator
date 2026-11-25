@@ -13,39 +13,34 @@
 
 <section class="panel">
   {% if runs %}
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Run</th><th>When (IST)</th><th>Status</th><th>Asked</th><th>Accepted</th>
-          <th>Rejected</th><th>Model</th><th>Ideas</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for run in runs %}
-        <tr>
-          <td class="mono">#{{ run.id }}</td>
-          <td>{{ run.created_at|ist('%d-%m-%Y %H:%M') }}</td>
-          <td><span class="status-pill {{ 'good' if run.status == 'done' else ('bad' if run.status == 'failed' else 'warn') }}"><i></i>{{ run.status }}</span></td>
-          <td>{{ run.requested }}</td>
-          <td><strong>{{ run.generated }}</strong></td>
-          <td>{{ run.rejected }}</td>
-          <td class="mono">{{ run.model }}</td>
-          <td><a href="/?run={{ run.id }}">{{ counts.get(run.id, 0) }} view</a></td>
-        </tr>
+  <div class="run-list">
+    {% for run in runs %}
+    <article class="run-row">
+      <span class="run-id mono">#{{ run.id }}</span>
+      <div class="run-main">
+        <div class="run-title">
+          <span class="status-pill {{ 'good' if run.status == 'done' else ('bad' if run.status == 'failed' else 'warn') }}"><i></i>{{ run.status }}</span>
+          <span>{{ run.created_at|ist('%d-%m-%Y %H:%M') }} IST</span>
+          {% if run.auto %}<span class="chip">Auto</span>{% elif run.categories %}<span class="chip">{{ run.categories|join(' · ') }}</span>{% endif %}
+        </div>
+        <p class="run-sub">
+          {{ run.generated }} accepted · {{ run.rejected }} rejected · model {{ run.model or '—' }}
+        </p>
         {% if run.error %}
-        <tr class="error-row">
-          <td colspan="8"><span class="err-label">Error</span> {{ run.error }}</td>
-        </tr>
+        <p class="run-sub error-text">{{ run.error }}</p>
         {% endif %}
-        {% endfor %}
-      </tbody>
-    </table>
+      </div>
+      <div class="run-counts">
+        <span>{{ counts.get(run.id, 0) }}</span><small>ideas</small>
+        <a class="link" href="/?run={{ run.id }}" aria-label="View ideas from run {{ run.id }}">view</a>
+      </div>
+    </article>
+    {% endfor %}
   </div>
   {% else %}
   <div class="empty">
     <h3>No runs yet</h3>
-    <p>Generate your first batch from the <a href="/">dashboard</a>.</p>
+    <p>Generate your first batch from the <a href="/">studio</a>.</p>
   </div>
   {% endif %}
 </section>

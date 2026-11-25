@@ -58,6 +58,11 @@ class Settings:
 
         self.request_timeout = float(os.getenv("REQUEST_TIMEOUT") or 90)
         self.allow_env_secrets = _bool("ALLOW_ENV_SECRETS", True)
+        # Opt-in escape hatch for a local Hacker AI-compatible gateway.
+        self.allow_insecure_base_url = _bool("HACKER_AI_ALLOW_INSECURE_BASE_URL", False)
+        self.security_headers = _bool("SECURITY_HEADERS", True)
+        # HSTS is only emitted for HTTPS requests; set to 0 to disable it entirely.
+        self.hsts = _bool("HSTS", True)
 
     def _secret_key(self) -> str:
         from_env = (os.getenv("APP_SECRET_KEY") or "").strip()
