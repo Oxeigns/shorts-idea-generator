@@ -62,7 +62,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="AI Viral Shorts Idea Generator", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="AI Viral Shorts Idea Generator", version="1.1.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 
 # No template uses an inline script, inline style or inline handler, so the strict
