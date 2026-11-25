@@ -12,7 +12,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 try:
     from dotenv import load_dotenv
 except ImportError:  # pragma: no cover - dotenv is a declared dependency
-    load_dotenv = None
+    load_dotenv = None  # type: ignore[assignment]
 
 if load_dotenv is not None:
     load_dotenv(BASE_DIR / ".env", override=False)

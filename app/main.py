@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app import netguard
 from app.config import settings
-from app.db import SessionLocal, get_session, init_db
+from app.db import get_session, init_db
 from app.models import Idea, Run, Voiceover
 from app.ratelimit import SlidingWindow
 from app.security import (
@@ -29,7 +29,8 @@ from app.security import (
     verify_password,
     verify_username,
 )
-from app.services import elevenlabs, hackerai, ideas as idea_service
+from app.services import elevenlabs, hackerai
+from app.services import ideas as idea_service
 from app.services.elevenlabs import ElevenLabsError
 from app.services.hackerai import ProviderError
 from app.store import (
@@ -148,7 +149,7 @@ def _theme(request: Request) -> str:
     return value if value in THEMES else "dark"
 
 
-def _page(request: Request, name: str, **ctx) -> HTMLResponse:
+def _page(request: Request, name: str, **ctx) -> HTMLResponse | RedirectResponse:
     user = _user(request)
     if not user:
         target = request.url.path
@@ -269,7 +270,7 @@ def dashboard(
     for idea in rows:
         local = to_ist(idea.created_at)
         idea_is_today = bool(local and local.date() == today)  # type: ignore[attr-defined]
-        setattr(idea, "is_today", idea_is_today)
+        idea.is_today = idea_is_today  # type: ignore[attr-defined]  # view-only flag
     eleven = secret_view(db, ELEVENLABS_API_KEY)
     hacker = secret_view(db, HACKER_AI_API_KEY)
     return _page(

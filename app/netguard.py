@@ -91,7 +91,7 @@ def assert_public_url(url: str) -> None:
     except socket.gaierror as exc:
         raise InvalidBaseURL(f"Could not resolve {host}: {exc}") from exc
     for info in infos:
-        raw_address = info[4][0]
+        raw_address = str(info[4][0])
         address = _literal_ip(raw_address)
         if address is None or not address.is_global:
             raise InvalidBaseURL(f"{host} resolves to a non-public address ({raw_address}).")

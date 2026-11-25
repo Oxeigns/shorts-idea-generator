@@ -264,6 +264,8 @@ and byte size, so you can tell exactly what produced an MP3.
 ```bash
 ./.venv/bin/pip install -r requirements-dev.txt
 ./.venv/bin/python -m pytest -q
+./.venv/bin/python -m ruff check app tests
+./.venv/bin/python -m mypy app
 ```
 
 The suite uses a temporary SQLite database and mocks every network call — no live keys are

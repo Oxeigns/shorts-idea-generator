@@ -176,6 +176,7 @@ def synthesize(
         raise ElevenLabsError("The voiceover text is too short to synthesize.", status=400)
 
     preset = EMOTION_PRESETS.get((emotion or "").lower(), EMOTION_PRESETS["energetic"])
+    speed_value = max(0.7, min(1.2, float(speed or 1.0)))
     payload = {
         "text": spoken,
         "model_id": model_id or settings.elevenlabs_model_id,
@@ -184,7 +185,7 @@ def synthesize(
             "similarity_boost": preset["similarity_boost"],
             "style": preset["style"],
             "use_speaker_boost": True,
-            "speed": max(0.7, min(1.2, float(speed or 1.0))),
+            "speed": speed_value,
         },
     }
     url = f"{BASE}/text-to-speech/{voice_id}"
@@ -205,4 +206,4 @@ def synthesize(
     audio = response.content
     if not audio:
         raise ElevenLabsError("ElevenLabs returned an empty audio file.", status=502)
-    return audio, {"chars": len(spoken), "model_id": payload["model_id"], "speed": payload["voice_settings"]["speed"]}
+    return audio, {"chars": len(spoken), "model_id": payload["model_id"], "speed": speed_value}
